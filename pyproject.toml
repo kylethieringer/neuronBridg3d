@@ -1,0 +1,35 @@
+[project]
+name = "nb3d"
+version = "0.1.0"
+description = "3D re-ranking of NeuronBridge driver-line candidates for MANC/BANC neurons"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "numpy",
+    "pandas",
+    "pyarrow",
+    "openpyxl",
+    "requests",
+    "h5py",
+    "navis",
+    "pillow",
+    "scipy",
+    "fastapi",
+    "uvicorn",
+    "av>=19.0.2",
+]
+
+[project.scripts]
+nb3d = "nb3d.cli:main"
+
+[dependency-groups]
+dev = ["pytest", "httpx"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/nb3d"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
