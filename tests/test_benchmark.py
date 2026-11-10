@@ -52,3 +52,82 @@ def test_evaluate_body_true_line_beyond_cutoff(monkeypatch):
     monkeypatch.setattr(run, "rerank", lambda g, c, **kw: [_ranked("A", 1, 1), _ranked("B", 2, 2)])
     row = run.evaluate_body("manc", 7, {"E"}, top_n=2)
     assert row["nb_rank"] == 5 and row["nb3d_rank"] is None and row["in_top_n"] is False
+
+
+def _fake_gt(tmp_path, monkeypatch, bodies=(1, 2, 3)):
+    import pandas as pd
+    gt = tmp_path / "gt.csv"
+    pd.DataFrame({"dataset": "manc", "body_id": list(bodies), "line": "SS1", "tier": 1}).to_csv(gt, index=False)
+    monkeypatch.setattr(run, "GROUNDTRUTH", gt)
+    monkeypatch.setattr(run, "RESULTS", tmp_path)
+
+
+def _ok_row(ds, body, lines, top_n, libs):
+    return {"dataset": ds, "body_id": body, "true_lines": "SS1", "nb_rank": 1, "nb3d_rank": 1,
+            "source": "3d", "in_top_n": True, "n_candidates": 1}
+
+
+def test_default_output_name_has_no_date(tmp_path, monkeypatch):
+    _fake_gt(tmp_path, monkeypatch)
+    monkeypatch.setattr(run, "evaluate_body", _ok_row)
+    run.run_benchmark("manc", 1)
+    assert (tmp_path / "benchmark-manc-tier1.csv").exists()
+
+
+def test_resume_skips_done_bodies(tmp_path, monkeypatch):
+    _fake_gt(tmp_path, monkeypatch)
+    calls = []
+    monkeypatch.setattr(run, "evaluate_body", lambda *a: calls.append(a[1]) or _ok_row(*a))
+    out = tmp_path / "x.csv"
+    run.run_benchmark("manc", 1, limit=2, out=out)
+    df = run.run_benchmark("manc", 1, out=out)
+    assert calls == [1, 2, 3] and len(df) == 3
+
+
+def test_error_rows_keep_columns_aligned(tmp_path, monkeypatch):
+    from nb3d.query import QueryError
+    _fake_gt(tmp_path, monkeypatch)
+
+    def ev(ds, body, *a):
+        if body == 2:
+            raise QueryError("nope")
+        return _ok_row(ds, body, *a)
+    monkeypatch.setattr(run, "evaluate_body", ev)
+    df = run.run_benchmark("manc", 1, out=tmp_path / "x.csv")
+    assert list(df.columns) == run.COLUMNS
+    assert df.set_index("body_id").loc[2, "error"] == "nope"
+    assert df.set_index("body_id").loc[3, "nb_rank"] == 1
+
+
+def test_transient_error_skips_body_without_recording(tmp_path, monkeypatch):
+    _fake_gt(tmp_path, monkeypatch)
+
+    def ev(ds, body, *a):
+        if body == 2:
+            raise ConnectionError("network blip")
+        return _ok_row(ds, body, *a)
+    monkeypatch.setattr(run, "evaluate_body", ev)
+    df = run.run_benchmark("manc", 1, out=tmp_path / "x.csv")
+    assert sorted(df.body_id) == [1, 3]
+
+
+def test_cli_out_flag(tmp_path, monkeypatch):
+    from nb3d import cli
+    seen = {}
+    monkeypatch.setattr(run, "run_benchmark", lambda *a, out=None, **k: seen.setdefault("out", out) and run.pd.DataFrame())
+    monkeypatch.setattr(run, "report", lambda df, n: "")
+    cli.main(["benchmark", "--out", str(tmp_path / "o.csv")])
+    assert str(seen["out"]) == str(tmp_path / "o.csv")
+
+
+def test_lookup_error_recorded_not_fatal(tmp_path, monkeypatch):
+    from nb3d.em import NoSkeleton
+    _fake_gt(tmp_path, monkeypatch)
+
+    def ev(ds, body, *a):
+        if body == 1:
+            raise NoSkeleton("no swc")
+        return _ok_row(ds, body, *a)
+    monkeypatch.setattr(run, "evaluate_body", ev)
+    df = run.run_benchmark("manc", 1, out=tmp_path / "x.csv")
+    assert len(df) == 3 and df.set_index("body_id").loc[1, "error"] == "no swc"

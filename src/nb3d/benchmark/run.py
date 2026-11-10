@@ -1,7 +1,6 @@
 """Compare NeuronBridge's ranking with nb3d's on the ground-truth table."""
 from __future__ import annotations
 
-import datetime as dt
 import statistics
 from pathlib import Path
 
@@ -13,6 +12,10 @@ from .groundtruth import OUT as GROUNDTRUTH
 
 RESULTS = Path(__file__).resolve().parents[3] / "results"
 FULL = 10**9
+COLUMNS = ["dataset", "body_id", "true_lines", "nb_rank", "nb3d_rank", "source",
+           "in_top_n", "n_candidates", "tier", "error"]
+# Network/IO failures: skip the body without recording it, so a later resume retries it.
+TRANSIENT = (OSError, ConnectionError, TimeoutError)
 
 
 def rank_of_correct(ranked_lines: list[str], true_lines: set[str]) -> int | None:
@@ -64,7 +67,7 @@ def run_benchmark(dataset: str = "manc", tier: int | None = None, limit: int | N
     bodies = gt.groupby("body_id").agg(lines=("line", set), tier=("tier", "min"))
     if limit:
         bodies = bodies.head(limit)
-    out = out or RESULTS / f"benchmark-{dataset}-tier{tier or 'all'}-{dt.date.today()}.csv"
+    out = Path(out) if out else RESULTS / f"benchmark-{dataset}-tier{tier or 'all'}.csv"
     out.parent.mkdir(parents=True, exist_ok=True)
     done = pd.read_csv(out) if out.exists() else pd.DataFrame()
     done_ids = set(done.body_id) if len(done) else set()
@@ -73,12 +76,15 @@ def run_benchmark(dataset: str = "manc", tier: int | None = None, limit: int | N
             continue
         try:
             row = evaluate_body(dataset, int(body), rec["lines"], top_n, libraries)
-        except QueryError as e:
+        except TRANSIENT as e:
+            print(f"[{i}/{len(bodies)}] {body}: skipped ({type(e).__name__}: {e}); rerun to retry", flush=True)
+            continue
+        except (QueryError, LookupError) as e:
             row = {"dataset": dataset, "body_id": int(body), "true_lines": ",".join(sorted(rec["lines"])),
                    "nb_rank": None, "nb3d_rank": None, "source": None, "in_top_n": False,
                    "n_candidates": 0, "error": str(e)}
         row["tier"] = int(rec["tier"])
-        pd.DataFrame([row]).to_csv(out, mode="a", header=not out.exists(), index=False)
+        pd.DataFrame([row]).reindex(columns=COLUMNS).to_csv(out, mode="a", header=not out.exists(), index=False)
         print(f"[{i}/{len(bodies)}] {body}: NB {row['nb_rank']} -> nb3d {row['nb3d_rank']}", flush=True)
     return pd.read_csv(out)
 
