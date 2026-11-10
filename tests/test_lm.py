@@ -95,3 +95,16 @@ def test_load_lm_points_uses_3d_stack(monkeypatch):
     p = lm.load_lm_points(_hit({"CDM": "x/cdm.png", "VisuallyLosslessStack": "x/s.h5j"}))
     assert p.source == "3d" and 100 < len(p.xyz) <= 20000
     assert p.xyz[:, 0].max() <= TEMPLATE_UM[0]
+
+
+def test_load_lm_points_uses_gal4_expression_cdm(monkeypatch):
+    seen = []
+
+    def fake_fetch(url):
+        seen.append(url)
+        return FIX / "cdm_sample.png"
+
+    monkeypatch.setattr(lm, "fetch", fake_fetch)
+    p = lm.load_lm_points(_hit({"Gal4Expression": "Gen1/CDM/R1/x.png"}))
+    assert p.source == "2.5d" and len(p.xyz) > 100
+    assert seen == ["https://s3.amazonaws.com/janelia-flylight-imagery/Gen1/CDM/R1/x.png"]

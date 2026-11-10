@@ -72,7 +72,7 @@ def load_lm_points(hit: LmHit, prefer_3d: bool = True, threshold: float | None =
     if prefer_3d and stack_url:
         vol = decode_h5j(fetch(stack_url), hit.channel or 1)
         return LmPoints(stack_to_points(vol, VOXEL_UM, threshold), "3d")
-    cdm_url = file_url(hit.files, "CDM")
+    cdm_url = file_url(hit.files, "CDM") or file_url(hit.files, "Gal4Expression")
     rgb = np.asarray(Image.open(fetch(cdm_url)).convert("RGB"))
     pts = cdm_to_points(rgb, threshold=int(threshold) if threshold is not None else 20)
     if len(pts) > MAX_POINTS:
