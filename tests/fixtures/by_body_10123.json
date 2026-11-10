@@ -1,0 +1,75 @@
+{
+ "results": [
+  {
+   "libraryName": "FlyEM_VNC_v0.5",
+   "alignmentSpace": "JRC2018_VNC_Unisex_40x_DS",
+   "anatomicalArea": "VNC",
+   "gender": "m",
+   "neuronInstance": "10011_L",
+   "id": "2972571955072696331",
+   "publishedName": "vnc:v0.5:10123",
+   "files": {
+    "CDM": "JRC2018_VNC_Unisex_40x_DS/FlyEM_VNC_v0.5/10123-JRC2018_VNC_Unisex_40x_DS-CDM.png",
+    "AlignedBodySWC": "JRC2018_VNC_Unisex_40x_DS/FlyEM_VNC_v0.5/SWC/10123.swc",
+    "CDMThumbnail": "JRC2018_VNC_Unisex_40x_DS/FlyEM_VNC_v0.5/10123-JRC2018_VNC_Unisex_40x_DS-CDM.jpg",
+    "store": "fl:open_data:vnc",
+    "PPPMResults": "2970434043063042594.json"
+   },
+   "type": "EMImage"
+  },
+  {
+   "libraryName": "FlyEM_MANC_v1.2.1",
+   "alignmentSpace": "JRC2018_VNC_Unisex_40x_DS",
+   "anatomicalArea": "VNC",
+   "gender": "m",
+   "neuronType": "hg1 MN",
+   "neuronInstance": "MNwm03_ADMN_L",
+   "id": "3333196959159296131",
+   "publishedName": "manc:v1.2.1:10123",
+   "files": {
+    "CDM": "JRC2018_VNC_Unisex_40x_DS/FlyEM_MANC_v1.2.1/10123-JRC2018_VNC_Unisex_40x_DS-CDM.png",
+    "CDSResults": "3333196959159296131.json",
+    "AlignedBodySWC": "JRC2018_VNC_Unisex_40x_DS/FlyEM_MANC_v1.2.1/SWC/10123.swc",
+    "CDMThumbnail": "JRC2018_VNC_Unisex_40x_DS/FlyEM_MANC_v1.2.1/10123-JRC2018_VNC_Unisex_40x_DS-CDM.jpg",
+    "store": "fl:open_data:vnc"
+   },
+   "type": "EMImage"
+  },
+  {
+   "libraryName": "FlyEM_Male_CNS_Brain_v0.9",
+   "alignmentSpace": "JRC2018_Unisex_20x_HR",
+   "anatomicalArea": "Brain",
+   "gender": "m",
+   "neuronType": "DNg30",
+   "neuronInstance": "DNg30_L",
+   "id": "3513029248660238467",
+   "publishedName": "male-cns:v0.9:10123",
+   "files": {
+    "CDM": "JRC2018_Unisex_20x_HR/FlyEM_Male_CNS_Brain_v0.9/10123-JRC2018_Unisex_20x_HR-CDM.png",
+    "CDSResults": "3513029248660238467.json",
+    "AlignedBodySWC": "JRC2018_Unisex_20x_HR/FlyEM_Male_CNS_Brain_v0.9/SWC/10123.swc",
+    "CDMThumbnail": "JRC2018_Unisex_20x_HR/FlyEM_Male_CNS_Brain_v0.9/10123-JRC2018_Unisex_20x_HR-CDM.jpg",
+    "store": "fl:open_data:brain"
+   },
+   "type": "EMImage"
+  },
+  {
+   "libraryName": "FlyEM_Male_CNS_VNC_v0.9",
+   "alignmentSpace": "JRC2018_VNC_Unisex_40x_DS",
+   "anatomicalArea": "VNC",
+   "gender": "m",
+   "neuronType": "DNg30",
+   "neuronInstance": "DNg30_L",
+   "id": "3514108655253471363",
+   "publishedName": "male-cns:v0.9:10123",
+   "files": {
+    "CDM": "JRC2018_VNC_Unisex_40x_DS/FlyEM_Male_CNS_VNC_v0.9/10123-JRC2018_VNC_Unisex_40x_DS-CDM.png",
+    "CDSResults": "3514108655253471363.json",
+    "AlignedBodySWC": "JRC2018_VNC_Unisex_40x_DS/FlyEM_Male_CNS_VNC_v0.9/SWC/10123.swc",
+    "CDMThumbnail": "JRC2018_VNC_Unisex_40x_DS/FlyEM_Male_CNS_VNC_v0.9/10123-JRC2018_VNC_Unisex_40x_DS-CDM.jpg",
+    "store": "fl:open_data:vnc"
+   },
+   "type": "EMImage"
+  }
+ ]
+}
