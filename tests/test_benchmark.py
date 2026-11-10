@@ -71,7 +71,9 @@ def test_default_output_name_has_no_date(tmp_path, monkeypatch):
     _fake_gt(tmp_path, monkeypatch)
     monkeypatch.setattr(run, "evaluate_body", _ok_row)
     run.run_benchmark("manc", 1)
-    assert (tmp_path / "benchmark-manc-tier1.csv").exists()
+    run.run_benchmark("manc", 1, libraries=run.ALL_LIBRARIES)
+    assert (tmp_path / "benchmark-manc-tier1-split.csv").exists()
+    assert (tmp_path / "benchmark-manc-tier1-all.csv").exists()
 
 
 def test_resume_skips_done_bodies(tmp_path, monkeypatch):

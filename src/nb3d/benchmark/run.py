@@ -42,7 +42,7 @@ def summarize(ranks: list[int | None]) -> dict:
 def evaluate_body(dataset: str, body_id: int, true_lines: set[str], top_n: int = 200,
                   libraries: list[str] | None = None) -> dict:
     group = resolve(dataset, str(body_id))
-    libs = libraries or ALL_LIBRARIES
+    libs = libraries or SPLIT_LIBRARIES
     full = collect_candidates(group, top_n=FULL, libraries=libs)
     cands = full[:top_n]
     ranked = rerank(group, cands)
@@ -58,6 +58,14 @@ def evaluate_body(dataset: str, body_id: int, true_lines: set[str], top_n: int =
     }
 
 
+def _libs_tag(libraries: list[str]) -> str:
+    if list(libraries) == SPLIT_LIBRARIES:
+        return "split"
+    if list(libraries) == ALL_LIBRARIES:
+        return "all"
+    return "custom"
+
+
 def run_benchmark(dataset: str = "manc", tier: int | None = None, limit: int | None = None,
                   top_n: int = 200, libraries: list[str] | None = None, out: Path | None = None) -> pd.DataFrame:
     gt = pd.read_csv(GROUNDTRUTH)
@@ -67,7 +75,8 @@ def run_benchmark(dataset: str = "manc", tier: int | None = None, limit: int | N
     bodies = gt.groupby("body_id").agg(lines=("line", set), tier=("tier", "min"))
     if limit:
         bodies = bodies.head(limit)
-    out = Path(out) if out else RESULTS / f"benchmark-{dataset}-tier{tier or 'all'}.csv"
+    libraries = libraries or SPLIT_LIBRARIES
+    out = Path(out) if out else RESULTS / f"benchmark-{dataset}-tier{tier or 'all'}-{_libs_tag(libraries)}.csv"
     out.parent.mkdir(parents=True, exist_ok=True)
     done = pd.read_csv(out) if out.exists() else pd.DataFrame()
     done_ids = set(done.body_id) if len(done) else set()

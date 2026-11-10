@@ -13,8 +13,8 @@ def main(argv: list[str] | None = None) -> None:
     b.add_argument("--tier", type=int, choices=[1, 2, 3])
     b.add_argument("--limit", type=int)
     b.add_argument("--top-n", type=int, default=200)
-    b.add_argument("--libraries", choices=["all", "split"], default="all")
-    b.add_argument("--out", help="results CSV (default results/benchmark-<dataset>-tier<N>.csv); "
+    b.add_argument("--libraries", choices=["all", "split"], default="split")
+    b.add_argument("--out", help="results CSV (default results/benchmark-<dataset>-tier<N>-<libraries>.csv); "
                    "bodies already in it are skipped")
 
     s = sub.add_parser("serve", help="start the local browser app")
