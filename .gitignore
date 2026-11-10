@@ -1,0 +1,5 @@
+research/groundtruth-sources/banc/*.feather
+.superpowers/
+__pycache__/
+.venv/
+cache/
