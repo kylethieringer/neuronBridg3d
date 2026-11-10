@@ -22,6 +22,15 @@ WEB = Path(__file__).parent / "web"
 MAX_POINTS = 20000
 
 app = FastAPI(title="neuronBridg3d")
+
+
+@app.middleware("http")
+async def _revalidate_static(request, call_next):
+    """Make browsers re-check the app's own files on each load, so UI edits show after a refresh."""
+    response = await call_next(request)
+    if not request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
 JOBS: dict[tuple, dict] = {}
 GROUPS: dict[tuple, object] = {}
 HITS: dict[str, LmHit] = {}

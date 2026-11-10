@@ -103,3 +103,10 @@ def test_verdict_roundtrip(client):
     assert r.status_code == 200
     res = _search(client, query="T").json()["results"][0]
     assert res["verdict"] == "good"
+
+
+def test_static_files_revalidate():
+    from fastapi.testclient import TestClient
+    from nb3d.server import app
+    r = TestClient(app).get("/style.css")
+    assert r.status_code == 200 and r.headers["cache-control"] == "no-cache"
