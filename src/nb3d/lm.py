@@ -4,7 +4,10 @@ H5J decode route, channel mapping and geometry: docs/spike-findings.md ("3D LM s
 """
 from __future__ import annotations
 
+import hashlib
 import io
+import os
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -14,12 +17,15 @@ import h5py
 import numpy as np
 from PIL import Image
 
-from .cache import fetch
+from .cache import CACHE_DIR, fetch
 from .cdm25d import cdm_to_points
 from .em import TEMPLATE_PX, VOXEL_UM
 from .nbclient import LmHit, file_url
 
 MAX_POINTS = 20000
+# Derived 3D point clouds, so a cached stack is decoded once rather than once per query.
+POINTS_DIR = CACHE_DIR / "points"
+POINTS_VERSION = 1  # bump when stack_to_points / decode_h5j change behaviour
 
 
 @dataclass
@@ -67,11 +73,24 @@ def stack_to_points(volume: np.ndarray, voxel_um: tuple[float, float, float],
     return pts
 
 
+def _stack_points(stack_url: str, channel: int, threshold: float | None) -> np.ndarray:
+    key = f"v{POINTS_VERSION}|{stack_url}|{channel}|{threshold}|{MAX_POINTS}"
+    path = POINTS_DIR / f"{hashlib.sha1(key.encode()).hexdigest()}.npy"
+    if path.exists():
+        return np.load(path)
+    pts = stack_to_points(decode_h5j(fetch(stack_url), channel), VOXEL_UM, threshold)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(f".{os.getpid()}-{threading.get_ident()}.part")
+    with open(tmp, "wb") as f:
+        np.save(f, pts)
+    os.replace(tmp, path)
+    return pts
+
+
 def load_lm_points(hit: LmHit, prefer_3d: bool = True, threshold: float | None = None) -> LmPoints:
     stack_url = file_url(hit.files, "VisuallyLosslessStack")
     if prefer_3d and stack_url:
-        vol = decode_h5j(fetch(stack_url), hit.channel or 1)
-        return LmPoints(stack_to_points(vol, VOXEL_UM, threshold), "3d")
+        return LmPoints(_stack_points(stack_url, hit.channel or 1, threshold), "3d")
     cdm_url = file_url(hit.files, "CDM") or file_url(hit.files, "Gal4Expression")
     rgb = np.asarray(Image.open(fetch(cdm_url)).convert("RGB"))
     pts = cdm_to_points(rgb, threshold=int(threshold) if threshold is not None else 20)

@@ -108,3 +108,23 @@ def test_load_lm_points_uses_gal4_expression_cdm(monkeypatch):
     p = lm.load_lm_points(_hit({"Gal4Expression": "Gen1/CDM/R1/x.png"}))
     assert p.source == "2.5d" and len(p.xyz) > 100
     assert seen == ["https://s3.amazonaws.com/janelia-flylight-imagery/Gen1/CDM/R1/x.png"]
+
+
+def test_stack_points_cached_on_disk(monkeypatch):
+    monkeypatch.setattr(lm, "fetch", lambda url: FIX / "stack_sample.h5j")
+    hit = _hit({"VisuallyLosslessStack": "x/s.h5j"})
+    first = lm.load_lm_points(hit)
+    monkeypatch.setattr(lm, "decode_h5j", lambda *a: pytest.fail("decoded again despite cache"))
+    again = lm.load_lm_points(hit)
+    assert again.source == "3d" and np.array_equal(first.xyz, again.xyz)
+
+
+def test_points_cache_keyed_by_threshold_and_channel(monkeypatch):
+    monkeypatch.setattr(lm, "fetch", lambda url: FIX / "stack_sample.h5j")
+    calls = []
+    real = lm.decode_h5j
+    monkeypatch.setattr(lm, "decode_h5j", lambda p, ch: calls.append(ch) or real(p, ch))
+    hit = _hit({"VisuallyLosslessStack": "x/s.h5j"})
+    lm.load_lm_points(hit)
+    lm.load_lm_points(hit, threshold=500.0)
+    assert len(calls) == 2
