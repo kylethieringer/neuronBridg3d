@@ -186,3 +186,28 @@ def test_full_expression_gen1_uses_gal4_expression(monkeypatch):
 def test_full_expression_none(monkeypatch):
     monkeypatch.setattr(rank, "get_line_images", lambda line: [])
     assert rank.find_full_expression_image("SS9", "manc") is None
+
+
+def _im(id_, lib, area="VNC", obj="20x", ch=1, stack=True):
+    files = {"store": "v", "CDM": f"{id_}.png"}
+    if stack:
+        files["VisuallyLosslessStack"] = f"{id_}.h5j"
+    return {"id": id_, "libraryName": lib, "anatomicalArea": area, "objective": obj, "channel": ch,
+            "publishedName": "SS1", "slideCode": "s", "files": files}
+
+
+def test_full_expression_uses_omnibus_broad_20x(monkeypatch):
+    monkeypatch.setattr(rank, "get_line_images", lambda line: [_im("o", rank.OMNIBUS_BROAD)])
+    assert rank.find_full_expression_image("SS1", "manc").image_id == "o"
+
+
+def test_full_expression_prefers_split_drivers_over_omnibus(monkeypatch):
+    ims = [_im("o", rank.OMNIBUS_BROAD), _im("d", SPLIT)]
+    monkeypatch.setattr(rank, "get_line_images", lambda line: ims)
+    assert rank.find_full_expression_image("SS1", "manc").image_id == "d"
+
+
+def test_full_expression_skips_brain_images(monkeypatch):
+    ims = [_im("b", SPLIT, area="Brain"), _im("o", rank.OMNIBUS_BROAD, ch=2)]
+    monkeypatch.setattr(rank, "get_line_images", lambda line: ims)
+    assert rank.find_full_expression_image("SS1", "manc").image_id == "o"

@@ -14,7 +14,8 @@ from .query import QueryGroup
 from .score import combine, extra_expression_fraction, shape_score
 
 SPLIT_DRIVERS = "FlyLight Split-GAL4 Drivers"
-SPLIT_LIBRARIES = [SPLIT_DRIVERS, "FlyLight Split-GAL4 Omnibus Broad"]
+OMNIBUS_BROAD = "FlyLight Split-GAL4 Omnibus Broad"
+SPLIT_LIBRARIES = [SPLIT_DRIVERS, OMNIBUS_BROAD]
 ALL_LIBRARIES = SPLIT_LIBRARIES + ["FlyLight Gen1 MCFO", "FlyLight Annotator Gen1 MCFO"]
 IMAGES_PER_LINE = 3
 WORKERS = 8
@@ -71,7 +72,8 @@ def collect_candidates(group: QueryGroup, top_n: int = 200, libraries: list[str]
 
 def find_full_expression_image(line: str, dataset: str) -> LmHit | None:
     """The line's whole-VNC expression image (docs/spike-findings.md, "Full-expression images"):
-    Split-GAL4 Drivers 20x VNC, channel 1 with a 3D stack preferred; else a Gen1 GAL4 expression CDM."""
+    a 20x VNC image from Split-GAL4 Drivers (else Omnibus Broad), channel 1 with a 3D stack preferred;
+    else a Gen1 GAL4 expression CDM."""
     ims = get_line_images(line)
 
     def as_hit(im: dict, files: dict) -> LmHit:
@@ -79,9 +81,11 @@ def find_full_expression_image(line: str, dataset: str) -> LmHit | None:
                      channel=im.get("channel"), normalized_score=0.0, matching_pixels=0, mirrored=False,
                      files=files, objective=im.get("objective"))
 
-    split = [im for im in ims if im.get("libraryName") == SPLIT_DRIVERS and im.get("objective") == "20x"]
+    split = [im for im in ims if im.get("libraryName") in (SPLIT_DRIVERS, OMNIBUS_BROAD)
+             and im.get("objective") == "20x" and im.get("anatomicalArea", "VNC") == "VNC"]
     if split:
-        split.sort(key=lambda im: (im.get("channel") != 1, "VisuallyLosslessStack" not in im["files"]))
+        split.sort(key=lambda im: (im.get("libraryName") != SPLIT_DRIVERS, im.get("channel") != 1,
+                                   "VisuallyLosslessStack" not in im["files"]))
         return as_hit(split[0], split[0]["files"])
     for im in ims:
         expr = im["files"].get("Gal4Expression")
