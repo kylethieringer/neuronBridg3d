@@ -73,7 +73,7 @@ function render() {
       </tr>`).join("");
   } else {
     $("grid").innerHTML = state.results.map(r => `
-      <div class="card" data-line="${r.line}">
+      <div class="card${r.line === state.selected ? " sel" : ""}" data-line="${r.line}">
         <img loading="lazy" src="${r.thumbnail_url || ""}" alt="${r.line} colour-depth MIP">
         <div><strong>${r.rank}. ${r.line}</strong> · ${r.score.toFixed(3)}
           <span class="badge ${r.source === "3d" ? "d3" : ""}">${r.source === "3d" ? "3D" : "2.5D"}</span><br>
