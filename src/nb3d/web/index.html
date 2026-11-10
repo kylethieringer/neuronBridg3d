@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>neuronBridg3d</title>
+  <link rel="stylesheet" href="style.css">
+  <script type="importmap">
+    {"imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }}
+  </script>
+</head>
+<body>
+  <header class="bar">
+    <strong class="brand">neuronBridg3d</strong>
+    <form id="search">
+      <input id="query" placeholder="Body ID(s) or cell type, e.g. 10123 or hg1 MN" required>
+      <select id="dataset" title="Dataset">
+        <option value="manc">MANC</option>
+        <option value="banc">BANC</option>
+      </select>
+      <select id="side" title="Side">
+        <option value="">both sides</option>
+        <option value="L">left</option>
+        <option value="R">right</option>
+      </select>
+      <select id="segment" title="Segment (BANC only)">
+        <option value="">all segments</option>
+        <option>T1</option><option>T2</option><option>T3</option>
+        <option>A1</option><option>A2</option><option>A3</option><option>A4</option><option>A5</option>
+      </select>
+      <details class="libs">
+        <summary>Lines</summary>
+        <label><input type="checkbox" name="lib" value="FlyLight Split-GAL4 Drivers" checked> Split-GAL4 Drivers</label>
+        <label><input type="checkbox" name="lib" value="FlyLight Split-GAL4 Omnibus Broad" checked> Split-GAL4 Omnibus Broad</label>
+        <label><input type="checkbox" name="lib" value="FlyLight Gen1 MCFO"> Gen1 MCFO</label>
+        <label><input type="checkbox" name="lib" value="FlyLight Annotator Gen1 MCFO"> Annotator Gen1 MCFO</label>
+      </details>
+      <label class="pen"><input type="checkbox" id="penalty"> Penalise extra expression</label>
+      <label class="pen" id="weightWrap" hidden>weight <input type="range" id="weight" min="0" max="1" step="0.05" value="0.5"><output id="weightOut">0.50</output></label>
+      <button type="submit">Search</button>
+    </form>
+  </header>
+
+  <div id="status" class="status" role="status"></div>
+
+  <main>
+    <section id="listPane">
+      <div class="paneHead">
+        <span id="groupInfo"></span>
+        <span class="viewToggle">
+          <button type="button" id="viewList" class="on">List</button>
+          <button type="button" id="viewGrid">Grid</button>
+        </span>
+      </div>
+      <table id="results" hidden>
+        <thead><tr>
+          <th>#</th><th>Line</th><th>Score</th><th></th><th title="NeuronBridge rank">NB #</th><th>Penalty</th><th>Verdict</th><th></th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+      <div id="grid" hidden></div>
+    </section>
+
+    <section id="viewerPane">
+      <div class="paneHead">
+        <span id="viewerTitle">Select a line to view it in 3D</span>
+      </div>
+      <div id="viewer"></div>
+      <div class="controls">
+        <div id="cellToggles"></div>
+        <label>LM threshold <input type="range" id="threshold" min="0" max="20000" step="250" value="0"> <output id="thrOut">auto</output></label>
+        <label>Point size <input type="range" id="psize" min="0.5" max="4" step="0.25" value="1.25"></label>
+        <label>LM opacity <input type="range" id="opacity" min="0.05" max="1" step="0.05" value="0.35"></label>
+        <label><input type="checkbox" id="mirror"> Mirror EM</label>
+        <label><input type="checkbox" id="showExpr"> Full expression</label>
+        <button type="button" id="resetView">Reset view</button>
+      </div>
+      <div class="legend"><span class="sw em"></span>EM cells <span class="sw lm"></span>LM image <span class="sw ex"></span>full expression</div>
+    </section>
+  </main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
