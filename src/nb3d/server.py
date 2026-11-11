@@ -16,7 +16,7 @@ from .em import TEMPLATE_UM, load_em_points
 from .lm import load_lm_points
 from .nbclient import LmHit, file_url
 from .query import QueryError, resolve
-from .rank import ALL_LIBRARIES, SPLIT_LIBRARIES, collect_candidates, find_full_expression_image, rerank
+from .rank import ALL_LIBRARIES, SPLIT_LIBRARIES, collect_candidates, find_full_expression_images, rerank
 
 WEB = Path(__file__).parent / "web"
 MAX_POINTS = 20000
@@ -131,9 +131,9 @@ def geometry(dataset: str, body_ids: str, image_id: str, threshold: float | None
     out = {"em": em, "lm": _subsample(lm.xyz), "lm_source": lm.source,
            "template_outline": [[a, b, c] for a in (0, x) for b in (0, y) for c in (0, z)]}
     if expression_line:
-        expr = find_full_expression_image(expression_line, dataset)
-        if expr is not None:
-            e = load_lm_points(expr)
+        exprs = find_full_expression_images(expression_line, dataset)
+        if exprs:
+            e = load_lm_points(exprs[0])
             out["expression"], out["expression_source"] = _subsample(e.xyz), e.source
     return out
 

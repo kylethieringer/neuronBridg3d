@@ -70,10 +70,10 @@ def collect_candidates(group: QueryGroup, top_n: int = 200, libraries: list[str]
             for i, (line, hs) in enumerate(ordered[:top_n])]
 
 
-def find_full_expression_image(line: str, dataset: str) -> LmHit | None:
-    """The line's whole-VNC expression image (docs/spike-findings.md, "Full-expression images"):
-    a 20x VNC image from Split-GAL4 Drivers (else Omnibus Broad), channel 1 with a 3D stack preferred;
-    else a Gen1 GAL4 expression CDM."""
+def find_full_expression_images(line: str, dataset: str) -> list[LmHit]:
+    """The line's whole-VNC expression images (docs/spike-findings.md, "Full-expression images"):
+    every 20x VNC image from Split-GAL4 Drivers or Omnibus Broad (all samples and channels, so the
+    penalty can take the median and one noisy sample does not dominate), preferred display image first; else a Gen1 GAL4 expression CDM."""
     ims = get_line_images(line)
 
     def as_hit(im: dict, files: dict) -> LmHit:
@@ -81,17 +81,17 @@ def find_full_expression_image(line: str, dataset: str) -> LmHit | None:
                      channel=im.get("channel"), normalized_score=0.0, matching_pixels=0, mirrored=False,
                      files=files, objective=im.get("objective"))
 
-    split = [im for im in ims if im.get("libraryName") in (SPLIT_DRIVERS, OMNIBUS_BROAD)
+    split = [as_hit(im, im["files"]) for im in ims if im.get("libraryName") in (SPLIT_DRIVERS, OMNIBUS_BROAD)
              and im.get("objective") == "20x" and im.get("anatomicalArea", "VNC") == "VNC"]
+    # Preferred first (the viewer shows exprs[0]): Split-GAL4 Drivers, channel 1, with a 3D stack.
+    split.sort(key=lambda h: (h.library != SPLIT_DRIVERS, h.channel != 1, "VisuallyLosslessStack" not in h.files))
     if split:
-        split.sort(key=lambda im: (im.get("libraryName") != SPLIT_DRIVERS, im.get("channel") != 1,
-                                   "VisuallyLosslessStack" not in im["files"]))
-        return as_hit(split[0], split[0]["files"])
+        return split
     for im in ims:
         expr = im["files"].get("Gal4Expression")
         if expr:
-            return as_hit(im, {"store": im["files"].get("store", ""), "Gal4Expression": expr})
-    return None
+            return [as_hit(im, {"store": im["files"].get("store", ""), "Gal4Expression": expr})]
+    return []
 
 
 def rerank(group: QueryGroup, candidates: list[Candidate], penalty: bool = False, weight: float = 0.5,
@@ -113,8 +113,9 @@ def rerank(group: QueryGroup, candidates: list[Candidate], penalty: bool = False
         shape = max(best[0], 0.0)
         pen: float | None | Literal["n/a"] = None
         if penalty:
-            expr = find_full_expression_image(cand.line, group.dataset)
-            pen = "n/a" if expr is None else extra_expression_fraction(group_xyz, load_lm_points(expr).xyz)
+            exprs = find_full_expression_images(cand.line, group.dataset)
+            pen = "n/a" if not exprs else float(np.median(
+                [extra_expression_fraction(group_xyz, load_lm_points(e).xyz) for e in exprs]))
         hit = best[1] or cand.hits[0]
         return RankedLine(
             line=cand.line, rank=0,

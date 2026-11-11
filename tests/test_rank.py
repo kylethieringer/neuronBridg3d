@@ -52,7 +52,7 @@ def fakes(monkeypatch):
         return p
 
     monkeypatch.setattr(rank, "load_lm_points", tracking_lm)
-    monkeypatch.setattr(rank, "find_full_expression_image", lambda line, ds: state["expr"].get(line))
+    monkeypatch.setattr(rank, "find_full_expression_images", lambda line, ds: state["expr"].get(line, []))
     return state
 
 
@@ -122,8 +122,8 @@ def test_penalty_lowers_broad_line(fakes):
     fakes["shape"][(1, "a")] = ShapeScore(0.8, False)
     fakes["shape"][(1, "b")] = ShapeScore(0.7, False)
     em = np.array([[1.0, 0, 0]])
-    fakes["expr"]["BROAD"] = hit("ea", "BROAD", 0)
-    fakes["expr"]["SPARSE"] = hit("eb", "SPARSE", 0)
+    fakes["expr"]["BROAD"] = [hit("ea", "BROAD", 0)]
+    fakes["expr"]["SPARSE"] = [hit("eb", "SPARSE", 0)]
     fakes["points"]["ea"] = np.vstack([em, np.full((9, 3), 200.0)])  # 90% far away
     fakes["points"]["eb"] = np.repeat(em, 10, axis=0)                 # all on the cell
     g = group(1)
@@ -161,31 +161,17 @@ def test_progress_called(fakes):
     assert calls[-1] == (2, 2)
 
 
-def test_full_expression_prefers_split_20x_channel1(monkeypatch):
-    ims = [
-        {"id": "63", "libraryName": SPLIT, "anatomicalArea": "VNC", "objective": "63x", "channel": 1,
-         "publishedName": "SS1", "slideCode": "s", "files": {"store": "v", "CDM": "a.png"}},
-        {"id": "c2", "libraryName": SPLIT, "anatomicalArea": "VNC", "objective": "20x", "channel": 2,
-         "publishedName": "SS1", "slideCode": "s", "files": {"store": "v", "CDM": "b.png", "VisuallyLosslessStack": "b.h5j"}},
-        {"id": "c1", "libraryName": SPLIT, "anatomicalArea": "VNC", "objective": "20x", "channel": 1,
-         "publishedName": "SS1", "slideCode": "s", "files": {"store": "v", "CDM": "c.png", "VisuallyLosslessStack": "c.h5j"}},
-    ]
-    monkeypatch.setattr(rank, "get_line_images", lambda line: ims)
-    assert rank.find_full_expression_image("SS1", "manc").image_id == "c1"
-
-
-def test_full_expression_gen1_uses_gal4_expression(monkeypatch):
-    ims = [{"id": "m", "libraryName": MCFO, "anatomicalArea": "VNC", "objective": "40x", "channel": 2,
-            "publishedName": "R1", "slideCode": "s",
-            "files": {"store": "v", "CDM": "m.png", "VisuallyLosslessStack": "m.h5j", "Gal4Expression": "Gen1/CDM/R1/x.png"}}]
-    monkeypatch.setattr(rank, "get_line_images", lambda line: ims)
-    h = rank.find_full_expression_image("R1", "manc")
-    assert h.files == {"store": "v", "Gal4Expression": "Gen1/CDM/R1/x.png"}
-
-
-def test_full_expression_none(monkeypatch):
-    monkeypatch.setattr(rank, "get_line_images", lambda line: [])
-    assert rank.find_full_expression_image("SS9", "manc") is None
+def test_penalty_is_median_over_expression_images(fakes):
+    fakes["hits"]["em1"] = [hit("a", "SS1", 90)]
+    fakes["shape"][(1, "a")] = ShapeScore(0.8, False)
+    em = np.array([[1.0, 0, 0]])
+    fakes["expr"]["SS1"] = [hit(f"e{i}", "SS1", 0) for i in range(3)]
+    for i, far in enumerate([9, 1, 2]):  # extra fractions 0.9, 0.1, 0.2 -> median 0.2
+        fakes["points"][f"e{i}"] = np.vstack([np.repeat(em, 10 - far, axis=0), np.full((far, 3), 200.0)])
+    g = group(1)
+    r = rank.rerank(g, rank.collect_candidates(g), penalty=True, weight=0.5)
+    assert r[0].penalty == pytest.approx(0.2)
+    assert r[0].score == pytest.approx(0.8 * (1 - 0.5 * 0.2))
 
 
 def _im(id_, lib, area="VNC", obj="20x", ch=1, stack=True):
@@ -196,18 +182,32 @@ def _im(id_, lib, area="VNC", obj="20x", ch=1, stack=True):
             "publishedName": "SS1", "slideCode": "s", "files": files}
 
 
-def test_full_expression_uses_omnibus_broad_20x(monkeypatch):
-    monkeypatch.setattr(rank, "get_line_images", lambda line: [_im("o", rank.OMNIBUS_BROAD)])
-    assert rank.find_full_expression_image("SS1", "manc").image_id == "o"
-
-
-def test_full_expression_prefers_split_drivers_over_omnibus(monkeypatch):
-    ims = [_im("o", rank.OMNIBUS_BROAD), _im("d", SPLIT)]
+def _ids(monkeypatch, ims):
     monkeypatch.setattr(rank, "get_line_images", lambda line: ims)
-    assert rank.find_full_expression_image("SS1", "manc").image_id == "d"
+    return sorted(h.image_id for h in rank.find_full_expression_images("SS1", "manc"))
 
 
-def test_full_expression_skips_brain_images(monkeypatch):
-    ims = [_im("b", SPLIT, area="Brain"), _im("o", rank.OMNIBUS_BROAD, ch=2)]
+def test_full_expression_uses_all_split_20x_vnc_images(monkeypatch):
+    ims = [_im("63", SPLIT, obj="63x"), _im("b", SPLIT, area="Brain"), _im("m", MCFO),
+           _im("d1", SPLIT), _im("d2", SPLIT, ch=2), _im("o", rank.OMNIBUS_BROAD, stack=False)]
+    assert _ids(monkeypatch, ims) == ["d1", "d2", "o"]
+
+
+def test_full_expression_preferred_display_image_first(monkeypatch):
+    ims = [_im("o", rank.OMNIBUS_BROAD), _im("d2", SPLIT, ch=2), _im("d1n", SPLIT, stack=False), _im("d1", SPLIT)]
     monkeypatch.setattr(rank, "get_line_images", lambda line: ims)
-    assert rank.find_full_expression_image("SS1", "manc").image_id == "o"
+    assert [h.image_id for h in rank.find_full_expression_images("SS1", "manc")] == ["d1", "d1n", "d2", "o"]
+
+
+def test_full_expression_gen1_uses_gal4_expression(monkeypatch):
+    ims = [{"id": "m", "libraryName": MCFO, "anatomicalArea": "VNC", "objective": "40x", "channel": 2,
+            "publishedName": "R1", "slideCode": "s",
+            "files": {"store": "v", "CDM": "m.png", "VisuallyLosslessStack": "m.h5j", "Gal4Expression": "Gen1/CDM/R1/x.png"}}]
+    monkeypatch.setattr(rank, "get_line_images", lambda line: ims)
+    [h] = rank.find_full_expression_images("R1", "manc")
+    assert h.files == {"store": "v", "Gal4Expression": "Gen1/CDM/R1/x.png"}
+
+
+def test_full_expression_none(monkeypatch):
+    monkeypatch.setattr(rank, "get_line_images", lambda line: [])
+    assert rank.find_full_expression_images("SS9", "manc") == []
