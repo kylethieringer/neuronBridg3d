@@ -25,7 +25,7 @@ from .nbclient import LmHit, file_url
 MAX_POINTS = 20000
 # Derived 3D point clouds, so a cached stack is decoded once rather than once per query.
 POINTS_DIR = CACHE_DIR / "points"
-POINTS_VERSION = 1  # bump when stack_to_points / decode_h5j change behaviour
+POINTS_VERSION = 2  # bump when stack_to_points / decode_h5j change behaviour
 
 
 @dataclass
@@ -60,11 +60,35 @@ def _otsu(values: np.ndarray, bins: int = 256) -> float:
     return float(centers[np.argmax(between)])
 
 
+SIGNAL_MAX_FRACTION = 0.02  # above this, a threshold is taken to include tissue background
+SIGNAL_MAX_ROUNDS = 4
+
+
+def signal_threshold(volume: np.ndarray) -> float:
+    """Otsu, re-applied to the voxels above the previous threshold while more than
+    SIGNAL_MAX_FRACTION of voxels remain above it.
+
+    A single Otsu often separates empty space from tissue autofluorescence instead of
+    tissue from labelled neurons (~20-30% of voxels above it); see docs/spike-findings.md."""
+    s = volume.ravel()[::7]
+    t = _otsu(s)
+    for _ in range(SIGNAL_MAX_ROUNDS):
+        above = s[s > t]
+        if len(above) <= SIGNAL_MAX_FRACTION * len(s) or above.min() == above.max():
+            break
+        t_next = _otsu(above)
+        if not (above > t_next).any():
+            break
+        t = t_next
+    return t
+
+
 def stack_to_points(volume: np.ndarray, voxel_um: tuple[float, float, float],
                     threshold: float | None = None, max_points: int = MAX_POINTS) -> np.ndarray:
-    """Voxels above threshold (Otsu by default) -> (N, 3) microns (x, y, z), subsampled deterministically."""
+    """Voxels above threshold (``signal_threshold`` by default) -> (N, 3) microns (x, y, z),
+    subsampled deterministically."""
     if threshold is None:
-        threshold = _otsu(volume.ravel()[::7])
+        threshold = signal_threshold(volume)
     zs, ys, xs = np.nonzero(volume > threshold)
     pts = np.column_stack([xs * voxel_um[0], ys * voxel_um[1], zs * voxel_um[2]])
     if len(pts) > max_points:

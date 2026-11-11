@@ -64,6 +64,24 @@ def test_stack_to_points_finds_bright_blob():
     assert c == pytest.approx([12 * VOXEL_UM[0], 32 * VOXEL_UM[1], 22 * VOXEL_UM[2]], abs=VOXEL_UM[2])
 
 
+def test_threshold_ignores_tissue_background():
+    """Otsu alone splits empty space from tissue; the signal threshold must sit above the tissue."""
+    rng = np.random.default_rng(0)
+    vol = np.zeros((40, 80, 80), dtype=np.uint16)
+    vol[:, 10:70, 10:70] = rng.normal(800, 80, (40, 60, 60)).clip(0).astype(np.uint16)   # tissue, ~55% of volume
+    vol[20:24, 30:34, 40:44] = 6000                                                      # neuron
+    t = lm.signal_threshold(vol)
+    assert 800 + 3 * 80 < t < 6000          # above tissue mean + 3 SD, below the neuron
+    assert (vol > t).mean() < 0.01
+
+
+def test_threshold_keeps_broad_signal():
+    rng = np.random.default_rng(0)
+    vol = rng.normal(300, 30, (40, 80, 80)).clip(0).astype(np.uint16)
+    vol[10:30, 20:60, 20:60] = 5000   # broad expression, 10% of volume
+    assert lm.signal_threshold(vol) < 5000
+
+
 def test_stack_subsample_deterministic():
     rng = np.random.default_rng(1)
     vol = (rng.random((30, 40, 40)) > 0.5).astype(np.uint16) * 1000

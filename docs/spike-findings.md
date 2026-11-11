@@ -112,3 +112,16 @@ Across all 2212 hits: 2040 (92%) list a stack. Images without one → 2.5D.
   queries share many lines). All 2.5D: ≈ 0.4 GB.
 - Time: ≈ 1.3 s per image download+decode serial → ~13 min serial for 600 images; with
   8 parallel downloads, a few minutes for a cold query.
+
+## LM signal threshold (added 2026-11-10)
+
+A single Otsu threshold on a 20x VNC stack often separates empty space from **tissue
+autofluorescence**, not tissue from labelled neurons: in 48% of 107 true-line images (33 MANC
+tier-1 bodies) more than 5% of voxels were above it (typically 20–30%, a solid VNC silhouette;
+see `docs/threshold-otsu-vs-signal.png`). `lm.signal_threshold` re-applies Otsu to the voxels
+above the previous threshold while more than 2% remain (max 4 rounds). On the same images it
+keeps a median 0.10% of voxels (90th percentile 0.30%, none above 5%) and lowers the median
+extra-expression fraction of true lines from 0.59 to 0.25; median EM coverage within 5 µm drops
+from 0.89 (inflated by tissue) to 0.67. Alternatives tried: median+k·MAD of non-zero voxels
+(fails, 27–31% above), Otsu capped at the 99/99.5/99.8th percentile (works, but fixes the
+signal fraction regardless of how broad the line is).
