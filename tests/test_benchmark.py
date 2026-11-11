@@ -133,3 +133,12 @@ def test_lookup_error_recorded_not_fatal(tmp_path, monkeypatch):
     monkeypatch.setattr(run, "evaluate_body", ev)
     df = run.run_benchmark("manc", 1, out=tmp_path / "x.csv")
     assert len(df) == 3 and df.set_index("body_id").loc[1, "error"] == "no swc"
+
+
+def test_cli_workers_flag(monkeypatch):
+    from nb3d import cli, rank
+    monkeypatch.setattr(rank, "WORKERS", 8)
+    monkeypatch.setattr(run, "run_benchmark", lambda *a, **k: run.pd.DataFrame())
+    monkeypatch.setattr(run, "report", lambda df, n: "")
+    cli.main(["benchmark", "--workers", "3"])
+    assert rank.WORKERS == 3
