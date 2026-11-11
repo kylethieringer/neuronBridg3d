@@ -125,3 +125,10 @@ extra-expression fraction of true lines from 0.59 to 0.25; median EM coverage wi
 from 0.89 (inflated by tissue) to 0.67. Alternatives tried: median+k·MAD of non-zero voxels
 (fails, 27–31% above), Otsu capped at the 99/99.5/99.8th percentile (works, but fixes the
 signal fraction regardless of how broad the line is).
+
+**Floor (added same day):** iterating can overshoot onto the brightest structure alone (e.g. MANC
+10145, an i2 MN: only the motor axon in the nerve survived, 0.01% of voxels, shape score 0.25).
+In 5.5% of the 227 evaluated images fewer than 0.02% of voxels survived, with median EM coverage
+0.04. `SIGNAL_MIN_FRACTION = 0.001` keeps at least the brightest 0.1% of voxels: no overshoots,
+10th-percentile coverage 0.08 → 0.18, median extra fraction 0.25 → 0.28 (a 0.2% floor raised it
+to 0.34). 10145's true line SS45778 scores 0.58 again.

@@ -69,7 +69,7 @@ def test_threshold_ignores_tissue_background():
     rng = np.random.default_rng(0)
     vol = np.zeros((40, 80, 80), dtype=np.uint16)
     vol[:, 10:70, 10:70] = rng.normal(800, 80, (40, 60, 60)).clip(0).astype(np.uint16)   # tissue, ~55% of volume
-    vol[20:24, 30:34, 40:44] = 6000                                                      # neuron
+    vol[16:24, 30:38, 40:48] = 6000                                                      # neuron, 0.2% (above the floor)
     t = lm.signal_threshold(vol)
     assert 800 + 3 * 80 < t < 6000          # above tissue mean + 3 SD, below the neuron
     assert (vol > t).mean() < 0.01
@@ -80,6 +80,18 @@ def test_threshold_keeps_broad_signal():
     vol = rng.normal(300, 30, (40, 80, 80)).clip(0).astype(np.uint16)
     vol[10:30, 20:60, 20:60] = 5000   # broad expression, 10% of volume
     assert lm.signal_threshold(vol) < 5000
+
+
+def test_threshold_keeps_dim_dendrites_next_to_bright_axon():
+    """Iterating Otsu can end on only the brightest structure (e.g. a motor axon in a nerve);
+    the threshold never keeps fewer than SIGNAL_MIN_FRACTION of voxels."""
+    rng = np.random.default_rng(0)
+    vol = rng.normal(800, 80, (60, 100, 100)).clip(0).astype(np.uint16)  # tissue
+    vol[20:30, 40:60, 40:60] = 3000          # dendrites: 4000 voxels, 0.067%
+    vol[25, 5:95, 5] = 60000                 # very bright axon
+    t = lm.signal_threshold(vol)
+    assert t < 3000
+    assert (vol > t).mean() >= lm.SIGNAL_MIN_FRACTION * 0.9
 
 
 def test_stack_subsample_deterministic():

@@ -25,7 +25,7 @@ from .nbclient import LmHit, file_url
 MAX_POINTS = 20000
 # Derived 3D point clouds, so a cached stack is decoded once rather than once per query.
 POINTS_DIR = CACHE_DIR / "points"
-POINTS_VERSION = 2  # bump when stack_to_points / decode_h5j change behaviour
+POINTS_VERSION = 3  # bump when stack_to_points / decode_h5j change behaviour
 
 
 @dataclass
@@ -62,6 +62,7 @@ def _otsu(values: np.ndarray, bins: int = 256) -> float:
 
 SIGNAL_MAX_FRACTION = 0.02  # above this, a threshold is taken to include tissue background
 SIGNAL_MAX_ROUNDS = 4
+SIGNAL_MIN_FRACTION = 0.001  # floor: keep at least the brightest 0.1% of voxels
 
 
 def signal_threshold(volume: np.ndarray) -> float:
@@ -69,7 +70,9 @@ def signal_threshold(volume: np.ndarray) -> float:
     SIGNAL_MAX_FRACTION of voxels remain above it.
 
     A single Otsu often separates empty space from tissue autofluorescence instead of
-    tissue from labelled neurons (~20-30% of voxels above it); see docs/spike-findings.md."""
+    tissue from labelled neurons (~20-30% of voxels above it). Iterating can overshoot onto the
+    brightest structure alone (e.g. a motor axon in a nerve, dropping its dendrites), so at least
+    SIGNAL_MIN_FRACTION of voxels is always kept. See docs/spike-findings.md."""
     s = volume.ravel()[::7]
     t = _otsu(s)
     for _ in range(SIGNAL_MAX_ROUNDS):
@@ -80,7 +83,7 @@ def signal_threshold(volume: np.ndarray) -> float:
         if not (above > t_next).any():
             break
         t = t_next
-    return t
+    return float(min(t, np.quantile(s, 1 - SIGNAL_MIN_FRACTION)))
 
 
 def stack_to_points(volume: np.ndarray, voxel_um: tuple[float, float, float],
