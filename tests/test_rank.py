@@ -111,6 +111,16 @@ def test_group_uses_best_cell(fakes):
     assert r[0].per_cell == {1: pytest.approx(0.1), 2: pytest.approx(0.8)}
 
 
+def test_forward_and_reverse_are_best_over_images(fakes):
+    fakes["hits"]["em1"] = [hit("a", "SS1", 90), hit("b", "SS1", 80)]
+    fakes["shape"][(1, "a")] = ShapeScore(0.5, False, forward=0.9, reverse=0.1)  # broad image
+    fakes["shape"][(1, "b")] = ShapeScore(0.6, False, forward=0.7, reverse=0.5)  # clean image
+    g = group(1)
+    [r] = rank.rerank(g, rank.collect_candidates(g))
+    assert r.score == pytest.approx(0.6) and r.best_image_id == "b"
+    assert r.forward == pytest.approx(0.9) and r.reverse == pytest.approx(0.5)
+
+
 def test_penalty_off_by_default(fakes):
     fakes["hits"]["em1"] = [hit("a", "SS1", 90)]
     g = group(1)

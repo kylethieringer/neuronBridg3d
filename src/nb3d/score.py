@@ -17,6 +17,8 @@ K = 5  # neighbours for dotprops tangents
 class ShapeScore:
     value: float
     mirrored: bool
+    forward: float = 0.0  # EM -> LM ("is the cell in the image"), best of both sides
+    reverse: float = 0.0  # LM -> EM ("is the image only the cell"), best of both sides
 
 
 def _dotprops(xyz: np.ndarray) -> navis.Dotprops:
@@ -37,15 +39,11 @@ def shape_score(em_xyz: np.ndarray, lm: LmPoints) -> ShapeScore:
     if len(lm.xyz) <= K or len(em_xyz) <= K:
         return ShapeScore(0.0, False)
     lm_dp = _dotprops(lm.xyz)
-
-    def mean_score(em_dp: navis.Dotprops) -> float:
-        return (_forward_nblast(em_dp, lm_dp) + _forward_nblast(lm_dp, em_dp)) / 2
-
-    direct = mean_score(_dotprops(em_xyz))
-    mirrored = mean_score(_dotprops(mirror_x(em_xyz)))
-    if mirrored > direct:
-        return ShapeScore(mirrored, True)
-    return ShapeScore(direct, False)
+    em_dp, em_m_dp = _dotprops(em_xyz), _dotprops(mirror_x(em_xyz))
+    fwd, fwd_m = _forward_nblast(em_dp, lm_dp), _forward_nblast(em_m_dp, lm_dp)
+    rev, rev_m = _forward_nblast(lm_dp, em_dp), _forward_nblast(lm_dp, em_m_dp)
+    direct, mirrored = (fwd + rev) / 2, (fwd_m + rev_m) / 2
+    return ShapeScore(max(direct, mirrored), mirrored > direct, max(fwd, fwd_m), max(rev, rev_m))
 
 
 def extra_expression_fraction(group_xyz: np.ndarray, expr_xyz: np.ndarray, radius_um: float = 15.0) -> float:

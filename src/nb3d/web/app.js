@@ -2,7 +2,14 @@ import { Viewer } from "./viewer.js";
 
 const $ = (id) => document.getElementById(id);
 const viewer = new Viewer($("viewer"));
-const state = { params: null, results: [], cells: [], selected: null, view: "list" };
+const state = { params: null, results: [], cells: [], selected: null, view: "list", sort: "rank" };
+// Column sort: ranks ascending, scores descending; ties keep nb3d rank order.
+const SORTS = {
+  rank: (a, b) => a.rank - b.rank, score: (a, b) => b.score - a.score || a.rank - b.rank,
+  forward: (a, b) => b.forward - a.forward || a.rank - b.rank, reverse: (a, b) => b.reverse - a.reverse || a.rank - b.rank,
+  nb_rank: (a, b) => a.nb_rank - b.nb_rank,
+};
+const sorted = () => [...state.results].sort(SORTS[state.sort]);
 
 function setStatus(msg, error = false) {
   $("status").textContent = msg;
@@ -60,11 +67,14 @@ function render() {
   $("viewList").classList.toggle("on", showList);
   $("viewGrid").classList.toggle("on", !showList);
   if (showList) {
-    $("results").querySelector("tbody").innerHTML = state.results.map(r => `
+    document.querySelectorAll("#results th[data-sort]").forEach(th => th.classList.toggle("on", th.dataset.sort === state.sort));
+    $("results").querySelector("tbody").innerHTML = sorted().map(r => `
       <tr data-line="${r.line}" class="${r.line === state.selected ? "sel" : ""}">
         <td>${r.rank}</td>
         <td><strong>${r.line}</strong></td>
         <td>${r.score.toFixed(3)}</td>
+        <td class="sub">${r.forward.toFixed(2)}</td>
+        <td class="sub">${r.reverse.toFixed(2)}</td>
         <td><span class="badge ${r.source === "3d" ? "d3" : ""}">${r.source === "3d" ? "3D" : "2.5D"}</span>${r.mirrored ? ' <span class="mir" title="matched on the mirrored side">↔</span>' : ""}</td>
         <td title="NeuronBridge score ${r.nb_score}">${r.nb_rank}</td>
         <td>${fmtPenalty(r.penalty)}</td>
@@ -72,12 +82,12 @@ function render() {
         <td class="links"><a href="${r.links.flylight}" target="_blank" rel="noopener">FlyLight</a><a href="${r.links.neuronbridge}" target="_blank" rel="noopener">NB</a></td>
       </tr>`).join("");
   } else {
-    $("grid").innerHTML = state.results.map(r => `
+    $("grid").innerHTML = sorted().map(r => `
       <div class="card${r.line === state.selected ? " sel" : ""}" data-line="${r.line}">
         <img loading="lazy" src="${r.thumbnail_url || ""}" alt="${r.line} colour-depth MIP">
         <div><strong>${r.rank}. ${r.line}</strong> · ${r.score.toFixed(3)}
           <span class="badge ${r.source === "3d" ? "d3" : ""}">${r.source === "3d" ? "3D" : "2.5D"}</span><br>
-          NB #${r.nb_rank} ${fmtPenalty(r.penalty)}</div>
+          fwd ${r.forward.toFixed(2)} · rev ${r.reverse.toFixed(2)} · NB #${r.nb_rank} ${fmtPenalty(r.penalty)}</div>
       </div>`).join("");
   }
 }
@@ -127,6 +137,8 @@ $("segment").disabled = true;
 $("viewList").addEventListener("click", () => { state.view = "list"; render(); });
 $("viewGrid").addEventListener("click", () => { state.view = "grid"; render(); });
 $("results").addEventListener("click", (e) => {
+  const th = e.target.closest("th[data-sort]");
+  if (th) { state.sort = th.dataset.sort; render(); return; }
   const tr = e.target.closest("tr[data-line]");
   if (!tr) return;
   if (e.target.closest("a")) return;

@@ -60,3 +60,8 @@ section { background: var(--panel); border: 1px solid var(--line); border-radius
 .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin: 0 4px 0 10px; vertical-align: -1px; }
 .sw.em { background: var(--em); } .sw.lm { background: var(--lm); } .sw.ex { background: var(--ex); }
 @media (max-width: 900px) { main { grid-template-columns: 1fr; } #viewer { min-height: 360px; } }
+
+#results th.sortable { cursor: pointer; user-select: none; }
+#results th.sortable:hover { text-decoration: underline; }
+#results th.sortable.on::after { content: " ▾"; }
+#results td.sub { color: var(--muted, #777); font-variant-numeric: tabular-nums; }

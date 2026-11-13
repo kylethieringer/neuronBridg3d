@@ -69,6 +69,8 @@ def test_mirror_choice_uses_combined_score(monkeypatch):
     monkeypatch.setattr(score, "_forward_nblast", fake)
     s = score.shape_score(curve(), LmPoints(curve(), "3d"))
     assert s.mirrored is True and s.value == pytest.approx(0.5)  # (0.6+0.4)/2 beats (0.9-0.5)/2
+    # forward and reverse are each the best over both sides, for sorting by "contains the cell"
+    assert s.forward == pytest.approx(0.9) and s.reverse == pytest.approx(0.4)
 
 
 def test_extra_fraction_zero_when_inside():

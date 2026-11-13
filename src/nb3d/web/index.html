@@ -57,7 +57,7 @@
       </div>
       <table id="results" hidden>
         <thead><tr>
-          <th>#</th><th>Line</th><th>Score</th><th></th><th title="NeuronBridge rank">NB #</th><th>Penalty</th><th>Verdict</th><th></th>
+          <th class="sortable" data-sort="rank" title="nb3d rank (sort by score)">#</th><th>Line</th><th class="sortable" data-sort="score" title="Mean of forward and reverse: the cell, and little else">Score</th><th class="sortable" data-sort="forward" title="Forward (EM → LM): is the whole cell in the image? High for any line containing it, broad lines included — useful for split-GAL4 hemidrivers">Fwd</th><th class="sortable" data-sort="reverse" title="Reverse (LM → EM): is the image only the cell? Low when the line labels much else">Rev</th><th></th><th class="sortable" data-sort="nb_rank" title="NeuronBridge rank">NB #</th><th>Penalty</th><th>Verdict</th><th></th>
         </tr></thead>
         <tbody></tbody>
       </table>

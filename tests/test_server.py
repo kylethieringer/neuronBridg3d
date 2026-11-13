@@ -35,7 +35,7 @@ def client(monkeypatch, tmp_path):
         h = _hit("img1", "SS1")
         return [RankedLine(line="SS1", rank=1, score=0.9, shape=0.9, source="3d", mirrored=False, best_cell=1,
                            best_image_id="img1", per_cell={1: 0.9}, penalty=None, nb_rank=7, nb_score=123.0,
-                           library=h.library, hits=[h])]
+                           library=h.library, hits=[h], forward=0.95, reverse=0.4)]
 
     monkeypatch.setattr(server, "resolve", fake_resolve)
     monkeypatch.setattr(server, "collect_candidates", lambda g, top_n=200, libraries=None: [Candidate("SS1", 7, 123.0, [_hit("img1", "SS1")])])
@@ -64,6 +64,7 @@ def test_search_returns_both_ranks(client):
     res = r.json()["results"][0]
     assert res["rank"] == 1 and res["nb_rank"] == 7 and res["nb_score"] == 123.0
     assert res["source"] == "3d"
+    assert res["forward"] == 0.95 and res["reverse"] == 0.4
     assert res["links"]["flylight"].endswith("line=SS1")
     assert res["links"]["neuronbridge"].endswith("SS1")
     assert res["thumbnail_url"].endswith("img1.jpg")

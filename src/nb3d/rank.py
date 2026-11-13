@@ -45,6 +45,8 @@ class RankedLine:
     nb_score: float
     library: str = ""
     hits: list[LmHit] = field(default_factory=list)
+    forward: float = 0.0  # best EM -> LM score over the line's images (high for any line containing the cell)
+    reverse: float = 0.0  # best LM -> EM score over the line's images (high for lines labelling little else)
 
 
 def collect_candidates(group: QueryGroup, top_n: int = 200, libraries: list[str] | None = None) -> list[Candidate]:
@@ -103,11 +105,13 @@ def rerank(group: QueryGroup, candidates: list[Candidate], penalty: bool = False
         per_cell: dict[int, float] = {}
         best = (-1.0, None, None, False)  # value, hit, source, mirrored
         best_cell = group.cells[0].body_id
+        forward = reverse = float("-inf")  # stays -inf only if the line has no images
         for h in cand.hits:
             lm: LmPoints = load_lm_points(h)
             for body, xyz in em_pts.items():
                 s = shape_score(xyz, lm)
                 per_cell[body] = max(per_cell.get(body, 0.0), s.value)
+                forward, reverse = max(forward, s.forward), max(reverse, s.reverse)
                 if s.value > best[0]:
                     best, best_cell = (s.value, h, lm.source, s.mirrored), body
         shape = max(best[0], 0.0)
@@ -123,6 +127,7 @@ def rerank(group: QueryGroup, candidates: list[Candidate], penalty: bool = False
             shape=shape, source=best[2] or ("3d" if "VisuallyLosslessStack" in hit.files else "2.5d"),
             mirrored=best[3], best_cell=best_cell, best_image_id=hit.image_id, per_cell=per_cell,
             penalty=pen, nb_rank=cand.nb_rank, nb_score=cand.nb_score, library=hit.library, hits=cand.hits,
+            forward=forward if cand.hits else 0.0, reverse=reverse if cand.hits else 0.0,
         )
 
     results: list[RankedLine] = []

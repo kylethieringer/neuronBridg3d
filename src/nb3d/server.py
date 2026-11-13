@@ -55,6 +55,7 @@ def _result_dict(r, dataset: str, query: str, verdict_map: dict) -> dict:
     best = next((h for h in r.hits if h.image_id == r.best_image_id), r.hits[0] if r.hits else None)
     return {
         "line": r.line, "rank": r.rank, "score": r.score, "shape": r.shape, "source": r.source,
+        "forward": r.forward, "reverse": r.reverse,
         "mirrored": r.mirrored, "best_cell": str(r.best_cell), "best_image_id": r.best_image_id,
         "per_cell": {str(k): v for k, v in r.per_cell.items()}, "penalty": r.penalty,
         "nb_rank": r.nb_rank, "nb_score": r.nb_score, "library": r.library,
