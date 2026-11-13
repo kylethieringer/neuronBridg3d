@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from pathlib import Path
 
 import numpy as np
@@ -120,8 +121,14 @@ def test_load_lm_points_falls_back_to_25d(monkeypatch):
     assert p.source == "2.5d" and len(p.xyz) > 100
 
 
+@contextmanager
+def _stack_fixture(url):
+    yield FIX / "stack_sample.h5j"
+
+
 def test_load_lm_points_uses_3d_stack(monkeypatch):
-    monkeypatch.setattr(lm, "fetch", lambda url: FIX / ("stack_sample.h5j" if url.endswith(".h5j") else "cdm_sample.png"))
+    monkeypatch.setattr(lm, "fetch", lambda url: pytest.fail("stack kept in the download cache"))
+    monkeypatch.setattr(lm, "fetch_transient", _stack_fixture)
     p = lm.load_lm_points(_hit({"CDM": "x/cdm.png", "VisuallyLosslessStack": "x/s.h5j"}))
     assert p.source == "3d" and 100 < len(p.xyz) <= 20000
     assert p.xyz[:, 0].max() <= TEMPLATE_UM[0]
@@ -141,7 +148,7 @@ def test_load_lm_points_uses_gal4_expression_cdm(monkeypatch):
 
 
 def test_stack_points_cached_on_disk(monkeypatch):
-    monkeypatch.setattr(lm, "fetch", lambda url: FIX / "stack_sample.h5j")
+    monkeypatch.setattr(lm, "fetch_transient", _stack_fixture)
     hit = _hit({"VisuallyLosslessStack": "x/s.h5j"})
     first = lm.load_lm_points(hit)
     monkeypatch.setattr(lm, "decode_h5j", lambda *a: pytest.fail("decoded again despite cache"))
@@ -150,7 +157,7 @@ def test_stack_points_cached_on_disk(monkeypatch):
 
 
 def test_points_cache_keyed_by_threshold_and_channel(monkeypatch):
-    monkeypatch.setattr(lm, "fetch", lambda url: FIX / "stack_sample.h5j")
+    monkeypatch.setattr(lm, "fetch_transient", _stack_fixture)
     calls = []
     real = lm.decode_h5j
     monkeypatch.setattr(lm, "decode_h5j", lambda p, ch: calls.append(ch) or real(p, ch))

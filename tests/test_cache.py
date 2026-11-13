@@ -53,3 +53,33 @@ def test_interrupted_download_leaves_no_file(tmp_path, monkeypatch):
         cache.fetch(url, cache_dir=tmp_path)
     assert not cache.cache_path(url, tmp_path).exists()
     assert not any(p.is_file() for p in tmp_path.rglob("*"))
+
+
+def test_fetch_transient_deletes_download_and_keeps_nothing(tmp_path, monkeypatch):
+    monkeypatch.setattr(cache.requests, "get", lambda url, stream=True, timeout=None: FakeResponse([b"stack"]))
+    url = "https://example.org/x/stack.h5j"
+    with cache.fetch_transient(url, cache_dir=tmp_path) as p:
+        assert p.read_bytes() == b"stack"
+    assert not p.exists()
+    assert not cache.cache_path(url, tmp_path).exists()
+    assert not any(q.is_file() for q in tmp_path.rglob("*"))
+
+
+def test_fetch_transient_uses_existing_cached_copy(tmp_path, monkeypatch):
+    url = "https://example.org/x/stack.h5j"
+    cached = cache.cache_path(url, tmp_path)
+    cached.parent.mkdir(parents=True)
+    cached.write_bytes(b"old")
+    monkeypatch.setattr(cache.requests, "get", lambda *a, **k: pytest.fail("downloaded despite cached copy"))
+    with cache.fetch_transient(url, cache_dir=tmp_path) as p:
+        assert p == cached and p.read_bytes() == b"old"
+    assert cached.exists()
+
+
+def test_fetch_transient_failed_download_leaves_no_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(cache.requests, "get",
+                        lambda url, stream=True, timeout=None: FakeResponse([b"a", b"b"], fail_after=1))
+    with pytest.raises(ConnectionError):
+        with cache.fetch_transient("https://example.org/x/stack.h5j", cache_dir=tmp_path):
+            pass
+    assert not any(q.is_file() for q in tmp_path.rglob("*"))

@@ -33,7 +33,9 @@ uv run nb3d serve         # opens http://127.0.0.1:8765 in your browser
 2. Choose which line collections to search (Split-GAL4 is on by default) and, if you want,
    tick **Penalise extra expression** and set its weight.
 3. Search. The first search of a neuron downloads images (up to a few GB, a few minutes);
-   everything is cached in `cache/`, so repeat searches are fast.
+   results are cached in `cache/`, so repeat searches are fast. Raw 3D stacks (`.h5j`, ~8 MB each)
+   are not kept, only the point clouds extracted from them, so moving the threshold slider
+   re-downloads the stack it needs.
 4. Click a line to see it in 3D: **magenta** = EM cells, **green** = the matched LM image,
    **orange** = the line's full expression (tick "Full expression"). Drag to rotate, scroll to zoom.
 5. Mark lines ✓ / ✗ / ? — verdicts are saved to `data/verdicts.csv`.

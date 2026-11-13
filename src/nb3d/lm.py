@@ -17,13 +17,14 @@ import h5py
 import numpy as np
 from PIL import Image
 
-from .cache import CACHE_DIR, fetch
+from .cache import CACHE_DIR, fetch, fetch_transient
 from .cdm25d import cdm_to_points
 from .em import TEMPLATE_PX, VOXEL_UM
 from .nbclient import LmHit, file_url
 
 MAX_POINTS = 20000
-# Derived 3D point clouds, so a cached stack is decoded once rather than once per query.
+# Derived 3D point clouds, so a stack is downloaded and decoded once rather than once per query.
+# The stacks themselves are not kept (about 8 MB each; hundreds of GB over a benchmark).
 POINTS_DIR = CACHE_DIR / "points"
 POINTS_VERSION = 3  # bump when stack_to_points / decode_h5j change behaviour
 
@@ -105,7 +106,9 @@ def _stack_points(stack_url: str, channel: int, threshold: float | None) -> np.n
     path = POINTS_DIR / f"{hashlib.sha1(key.encode()).hexdigest()}.npy"
     if path.exists():
         return np.load(path)
-    pts = stack_to_points(decode_h5j(fetch(stack_url), channel), VOXEL_UM, threshold)
+    with fetch_transient(stack_url) as stack:
+        vol = decode_h5j(stack, channel)
+    pts = stack_to_points(vol, VOXEL_UM, threshold)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(f".{os.getpid()}-{threading.get_ident()}.part")
     with open(tmp, "wb") as f:
