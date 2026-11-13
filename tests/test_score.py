@@ -34,12 +34,41 @@ def test_mirrored_match_scores_high():
     assert s.mirrored is True
 
 
-def test_extra_cells_barely_lower_shape_score():
-    # Forward (EM -> LM) score: extra labelled cells elsewhere don't hide a good match.
+def test_extra_cells_lower_shape_score():
+    # Mean of EM -> LM and LM -> EM: an image that also labels other cells scores below a clean one,
+    # so broad lines no longer outrank sparse ones (tier-2 benchmark, 2026-11-13).
     em = curve()
-    extra = curve(offset=(0, 150, 0))
-    s = score.shape_score(em, LmPoints(np.vstack([em, extra]), "3d"))
-    assert s.value > 0.85
+    clean = score.shape_score(em, LmPoints(em.copy(), "3d")).value
+    broad = score.shape_score(em, LmPoints(np.vstack([em, curve(offset=(0, 150, 0))]), "3d")).value
+    assert broad < clean - 0.2
+
+
+def test_partial_cover_scores_below_full_cover():
+    # The reverse direction must not reward an image that shows only part of the cell.
+    em = curve()
+    full = score.shape_score(em, LmPoints(em.copy(), "3d")).value
+    half = score.shape_score(em, LmPoints(em[:200].copy(), "3d")).value
+    assert half < full
+
+
+def test_mirror_choice_uses_combined_score(monkeypatch):
+    calls = {}
+
+    def fake(q, t):
+        key = (q.tag, t.tag)
+        return calls[key]
+
+    calls.update({("em", "lm"): 0.9, ("lm", "em"): -0.5, ("em_m", "lm"): 0.6, ("lm", "em_m"): 0.4})
+    tags = iter(["lm", "em", "em_m"])
+
+    class Dp:
+        def __init__(self, tag):
+            self.tag = tag
+
+    monkeypatch.setattr(score, "_dotprops", lambda xyz: Dp(next(tags)))
+    monkeypatch.setattr(score, "_forward_nblast", fake)
+    s = score.shape_score(curve(), LmPoints(curve(), "3d"))
+    assert s.mirrored is True and s.value == pytest.approx(0.5)  # (0.6+0.4)/2 beats (0.9-0.5)/2
 
 
 def test_extra_fraction_zero_when_inside():

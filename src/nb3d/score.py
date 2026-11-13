@@ -1,4 +1,4 @@
-"""3D shape similarity (NBLAST, EM -> LM) and the optional extra-expression penalty."""
+"""3D shape similarity (mean of EM -> LM and LM -> EM NBLAST) and the optional extra-expression penalty."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -31,13 +31,18 @@ def _forward_nblast(q: navis.Dotprops, t: navis.Dotprops) -> float:
 
 
 def shape_score(em_xyz: np.ndarray, lm: LmPoints) -> ShapeScore:
-    """Forward NBLAST of the EM cell against the LM cloud, normalised to the EM self-score.
-    Scored for the EM cell and its mirror image; the better one is kept."""
+    """Mean of forward (EM -> LM) and reverse (LM -> EM) NBLAST, each normalised to its query's self-score.
+    The reverse term penalises LM signal away from the cell, so broad images no longer outscore sparse
+    ones. Scored for the EM cell and its mirror image; the better one is kept."""
     if len(lm.xyz) <= K or len(em_xyz) <= K:
         return ShapeScore(0.0, False)
-    target = _dotprops(lm.xyz)
-    direct = _forward_nblast(_dotprops(em_xyz), target)
-    mirrored = _forward_nblast(_dotprops(mirror_x(em_xyz)), target)
+    lm_dp = _dotprops(lm.xyz)
+
+    def mean_score(em_dp: navis.Dotprops) -> float:
+        return (_forward_nblast(em_dp, lm_dp) + _forward_nblast(lm_dp, em_dp)) / 2
+
+    direct = mean_score(_dotprops(em_xyz))
+    mirrored = mean_score(_dotprops(mirror_x(em_xyz)))
     if mirrored > direct:
         return ShapeScore(mirrored, True)
     return ShapeScore(direct, False)
