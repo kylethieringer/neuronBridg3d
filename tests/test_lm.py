@@ -95,6 +95,39 @@ def test_threshold_keeps_dim_dendrites_next_to_bright_axon():
     assert (vol > t).mean() >= lm.SIGNAL_MIN_FRACTION * 0.9
 
 
+def _noisy_cdm():
+    """Template-sized CDM: dim tissue background over 40% of the image, and a bright neuron."""
+    rng = np.random.default_rng(0)
+    rgb = blank_cdm()
+    rgb[100:550, 50:500] = rng.integers(20, 45, (450, 450, 1)).astype(np.uint8) * np.array([1, 0, 1], np.uint8)
+    rgb[300:900, 280:284] = (255, 0, 200)    # neuron: 2400 px, 0.4% of the image
+    return rgb
+
+
+def test_cdm_threshold_above_tissue_background():
+    rgb = _noisy_cdm()
+    t = lm.cdm_threshold(rgb)
+    assert 44 <= t < 255                    # background tops out at 44
+    pts = cdm25d.cdm_to_points(rgb, threshold=int(t))
+    assert 2000 <= len(pts) <= 2600          # the neuron, not the background
+
+
+def test_cdm_threshold_keeps_broad_projection():
+    """CDMs are projections, so signal covers far more pixels than voxels: up to 10% is kept."""
+    rgb = blank_cdm()
+    rgb[200:500, 100:300] = (255, 0, 200)   # 60,000 px, ~9% of the image
+    assert lm.cdm_threshold(rgb) < 255
+
+
+def test_load_lm_points_25d_uses_adaptive_threshold(monkeypatch, tmp_path):
+    f = tmp_path / "noisy.png"
+    Image.fromarray(_noisy_cdm()).save(f)
+    monkeypatch.setattr(lm, "fetch", lambda url: f)
+    p = lm.load_lm_points(_hit({"CDM": "x/noisy.png"}))
+    assert p.source == "2.5d" and len(p.xyz) <= 2600
+    assert len(lm.load_lm_points(_hit({"CDM": "x/noisy.png"}), threshold=20).xyz) > 20000 * 0.9  # explicit wins
+
+
 def test_stack_subsample_deterministic():
     rng = np.random.default_rng(1)
     vol = (rng.random((30, 40, 40)) > 0.5).astype(np.uint16) * 1000

@@ -18,7 +18,7 @@ import numpy as np
 from PIL import Image
 
 from .cache import CACHE_DIR, fetch, fetch_transient
-from .cdm25d import cdm_to_points
+from .cdm25d import cdm_to_points, crop_label
 from .em import TEMPLATE_PX, VOXEL_UM
 from .nbclient import LmHit, file_url
 
@@ -64,11 +64,14 @@ def _otsu(values: np.ndarray, bins: int = 256) -> float:
 SIGNAL_MAX_FRACTION = 0.02  # above this, a threshold is taken to include tissue background
 SIGNAL_MAX_ROUNDS = 4
 SIGNAL_MIN_FRACTION = 0.001  # floor: keep at least the brightest 0.1% of voxels
+# CDMs are projections, so a neuron covers a larger share of pixels than of voxels. Chosen by agreement
+# with the 3D points of the same image (300 images: F1 0.77 at the old fixed threshold 20 -> 0.98).
+CDM_SIGNAL_MAX_FRACTION = 0.10
 
 
-def signal_threshold(volume: np.ndarray) -> float:
+def signal_threshold(volume: np.ndarray, max_fraction: float = SIGNAL_MAX_FRACTION) -> float:
     """Otsu, re-applied to the voxels above the previous threshold while more than
-    SIGNAL_MAX_FRACTION of voxels remain above it.
+    ``max_fraction`` of voxels remain above it.
 
     A single Otsu often separates empty space from tissue autofluorescence instead of
     tissue from labelled neurons (~20-30% of voxels above it). Iterating can overshoot onto the
@@ -78,13 +81,19 @@ def signal_threshold(volume: np.ndarray) -> float:
     t = _otsu(s)
     for _ in range(SIGNAL_MAX_ROUNDS):
         above = s[s > t]
-        if len(above) <= SIGNAL_MAX_FRACTION * len(s) or above.min() == above.max():
+        if len(above) <= max_fraction * len(s) or above.min() == above.max():
             break
         t_next = _otsu(above)
         if not (above > t_next).any():
             break
         t = t_next
     return float(min(t, np.quantile(s, 1 - SIGNAL_MIN_FRACTION)))
+
+
+def cdm_threshold(rgb: np.ndarray) -> float:
+    """Brightness threshold for a CDM: ``signal_threshold`` on max(R, G, B), allowing more signal
+    than in a stack. Replaces a fixed threshold of 20, which kept tissue background on dim images."""
+    return signal_threshold(crop_label(np.asarray(rgb))[..., :3].max(axis=2), CDM_SIGNAL_MAX_FRACTION)
 
 
 def stack_to_points(volume: np.ndarray, voxel_um: tuple[float, float, float],
@@ -123,7 +132,7 @@ def load_lm_points(hit: LmHit, prefer_3d: bool = True, threshold: float | None =
         return LmPoints(_stack_points(stack_url, hit.channel or 1, threshold), "3d")
     cdm_url = file_url(hit.files, "CDM") or file_url(hit.files, "Gal4Expression")
     rgb = np.asarray(Image.open(fetch(cdm_url)).convert("RGB"))
-    pts = cdm_to_points(rgb, threshold=int(threshold) if threshold is not None else 20)
+    pts = cdm_to_points(rgb, threshold=int(threshold if threshold is not None else cdm_threshold(rgb)))
     if len(pts) > MAX_POINTS:
         pts = pts[np.sort(np.random.default_rng(0).choice(len(pts), MAX_POINTS, replace=False))]
     return LmPoints(pts, "2.5d")
