@@ -44,3 +44,20 @@ def test_no_swc_raises(monkeypatch):
     cell.em_images[0].files.pop("AlignedBodySWC")
     with pytest.raises(em.NoSkeleton):
         em.load_em_points(cell)
+
+
+def test_load_em_segments_joins_each_node_to_its_parent(monkeypatch, tmp_path):
+    path = tmp_path / "t.swc"
+    path.write_text("# test\n1 1 0 0 0 1 -1\n2 3 10 0 0 1 1\n3 3 10 5 0 1 2\n4 3 0 7 0 1 1\n")
+    monkeypatch.setattr(em, "fetch", lambda url: path)
+    seg = em.load_em_segments(make_cell())
+    assert seg.shape == (3, 2, 3)  # root has no parent
+    assert sorted(map(tuple, seg.reshape(-1, 6).tolist())) == [
+        (0, 7, 0, 0, 0, 0), (10, 0, 0, 0, 0, 0), (10, 5, 0, 10, 0, 0)]  # (node, parent)
+
+
+def test_load_em_segments_real_skeleton_is_connected(monkeypatch):
+    monkeypatch.setattr(em, "fetch", lambda url: FIX / "em_sample.swc")
+    seg = em.load_em_segments(make_cell())
+    rows = [ln.split() for ln in (FIX / "em_sample.swc").read_text().splitlines() if ln.strip() and not ln.startswith("#")]
+    assert len(seg) == sum(r[6] != "-1" for r in rows)  # one segment per non-root node (this skeleton has 2 roots)

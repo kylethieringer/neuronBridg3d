@@ -110,7 +110,7 @@ async function loadGeometry() {
   const res = await fetch(`/api/geometry?${qs}`);
   const g = await res.json();
   if (!res.ok) { $("viewerTitle").textContent = g.error; return; }
-  viewer.setData({ em: g.em, lm: g.lm, template_outline: g.template_outline, expression: g.expression });
+  viewer.setData({ em: g.em, em_segments: g.em_segments, lm: g.lm, template_outline: g.template_outline, expression: g.expression });
   const img = r.images.find(i => i.image_id === r.best_image_id) || {};
   $("viewerTitle").textContent = `${r.line} · ${img.library || ""} ${img.slide_code || ""} ch${img.channel ?? ""} · ${g.lm_source === "3d" ? "3D stack" : "2.5D from CDM"}${g.expression ? " · full expression shown" : ""}`;
   $("cellToggles").innerHTML = state.cells.map(c => `

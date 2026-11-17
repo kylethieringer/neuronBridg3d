@@ -53,19 +53,52 @@ export class Viewer {
   _clear(obj) {
     if (!obj) return;
     this.root.remove(obj);
-    obj.geometry?.dispose();
-    obj.material?.dispose();
+    obj.traverse(o => { o.geometry?.dispose(); o.material?.dispose(); });
   }
 
-  setData({ em, lm, template_outline, expression }) {
-    Object.values(this.layers.em).forEach(o => this._clear(o));
-    this._clear(this.layers.lm); this._clear(this.layers.ex); this._clear(this.layers.box);
-    this.layers.em = {};
-    this.emData = em;
-    for (const [id, xyz] of Object.entries(em)) {
-      const p = this._points(xyz, COLORS.em, 1, this.mirror);
-      this.layers.em[id] = p; this.root.add(p);
+  // One EM cell: its skeleton as lines plus its nodes as points, drawn on top of the LM cloud
+  // (no depth test, rendered last) so the cell stays visible where the LM signal covers it.
+  _emCell(xyz, segments, mirror) {
+    const g = new THREE.Group();
+    if (segments && segments.length) {
+      const pos = new Float32Array(segments.length * 6);
+      segments.forEach((s, i) => {
+        for (let k = 0; k < 2; k++) {
+          const x = s[k * 3];
+          pos[i * 6 + k * 3] = mirror ? 2 * MIDLINE_X - x : x;
+          pos[i * 6 + k * 3 + 1] = -s[k * 3 + 1];
+          pos[i * 6 + k * 3 + 2] = -s[k * 3 + 2];
+        }
+      });
+      const geom = new THREE.BufferGeometry();
+      geom.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+      const lines = new THREE.LineSegments(geom, new THREE.LineBasicMaterial({ color: COLORS.em, depthTest: false }));
+      lines.renderOrder = 10;
+      g.add(lines);
     }
+    const pts = this._points(xyz, COLORS.em, 1, mirror);
+    pts.material.depthTest = false;
+    pts.renderOrder = 10;
+    g.add(pts);
+    g.userData.points = pts;
+    return g;
+  }
+
+  _drawEm(visible = {}) {
+    Object.values(this.layers.em).forEach(o => this._clear(o));
+    this.layers.em = {};
+    for (const [id, xyz] of Object.entries(this.emData)) {
+      const c = this._emCell(xyz, this.emSegments?.[id], this.mirror);
+      c.visible = visible[id] ?? true;
+      this.layers.em[id] = c; this.root.add(c);
+    }
+  }
+
+  setData({ em, em_segments, lm, template_outline, expression }) {
+    this._clear(this.layers.lm); this._clear(this.layers.ex); this._clear(this.layers.box);
+    this.emData = em;
+    this.emSegments = em_segments;
+    this._drawEm();
     this.layers.lm = this._points(lm, COLORS.lm, this.lmOpacity); this.root.add(this.layers.lm);
     if (expression) { this.layers.ex = this._points(expression, COLORS.ex, 0.25); this.root.add(this.layers.ex); }
     const xs = template_outline.map(p => p[0]), ys = template_outline.map(p => p[1]), zs = template_outline.map(p => p[2]);
@@ -87,7 +120,7 @@ export class Viewer {
 
   setPointSize(s) {
     this.pointSize = s;
-    for (const o of [...Object.values(this.layers.em), this.layers.lm, this.layers.ex]) if (o) o.material.size = s;
+    for (const o of [...Object.values(this.layers.em).map(c => c.userData.points), this.layers.lm, this.layers.ex]) if (o) o.material.size = s;
   }
 
   setOpacity(a) {
@@ -98,13 +131,6 @@ export class Viewer {
   setMirror(on) {
     this.mirror = on;
     if (!this.emData) return;
-    const vis = Object.fromEntries(Object.entries(this.layers.em).map(([k, o]) => [k, o.visible]));
-    Object.values(this.layers.em).forEach(o => this._clear(o));
-    this.layers.em = {};
-    for (const [id, xyz] of Object.entries(this.emData)) {
-      const p = this._points(xyz, COLORS.em, 1, on);
-      p.visible = vis[id] ?? true;
-      this.layers.em[id] = p; this.root.add(p);
-    }
+    this._drawEm(Object.fromEntries(Object.entries(this.layers.em).map(([k, o]) => [k, o.visible])));
   }
 }

@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import verdicts
-from .em import TEMPLATE_UM, load_em_points
+from .em import TEMPLATE_UM, load_em_points, load_em_segments
 from .lm import load_lm_points
 from .nbclient import LmHit, file_url
 from .query import QueryError, resolve
@@ -127,9 +127,10 @@ def geometry(dataset: str, body_ids: str, image_id: str, threshold: float | None
     ids = [int(b) for b in body_ids.split(",") if b.strip()]
     cells = {c.body_id: c for g in GROUPS.values() if g.dataset == dataset for c in g.cells}
     em = {str(b): _subsample(load_em_points(cells[b])) for b in ids if b in cells}
+    em_segments = {str(b): np.round(load_em_segments(cells[b]).reshape(-1, 6), 2).tolist() for b in ids if b in cells}
     lm = load_lm_points(hit, threshold=threshold)
     x, y, z = TEMPLATE_UM
-    out = {"em": em, "lm": _subsample(lm.xyz), "lm_source": lm.source,
+    out = {"em": em, "em_segments": em_segments, "lm": _subsample(lm.xyz), "lm_source": lm.source,
            "template_outline": [[a, b, c] for a in (0, x) for b in (0, y) for c in (0, z)]}
     if expression_line:
         exprs = find_full_expression_images(expression_line, dataset)

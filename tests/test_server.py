@@ -41,6 +41,7 @@ def client(monkeypatch, tmp_path):
     monkeypatch.setattr(server, "collect_candidates", lambda g, top_n=200, libraries=None: [Candidate("SS1", 7, 123.0, [_hit("img1", "SS1")])])
     monkeypatch.setattr(server, "rerank", fake_rerank)
     monkeypatch.setattr(server, "load_em_points", lambda cell: np.array([[1.0, 2, 3], [4, 5, 6]]))
+    monkeypatch.setattr(server, "load_em_segments", lambda cell: np.array([[[1.0, 2, 3], [4, 5, 6]]]))
     monkeypatch.setattr(server, "load_lm_points", lambda h, threshold=None: LmPoints(np.array([[7.0, 8, 9]]), "3d"))
     monkeypatch.setattr(server.verdicts, "VERDICTS", tmp_path / "v.csv")
     server.JOBS.clear()
@@ -92,6 +93,7 @@ def test_geometry_after_search(client):
     assert g["em"]["1"] == [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
     assert g["lm"] == [[7.0, 8.0, 9.0]] and g["lm_source"] == "3d"
     assert len(g["template_outline"]) == 8
+    assert g["em_segments"]["1"] == [[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]]  # skeleton drawn as lines
 
 
 def test_geometry_unknown_image_404(client):

@@ -26,13 +26,26 @@ def _parse_swc(text: str) -> np.ndarray:
     return np.array([[float(r[2]), float(r[3]), float(r[4])] for r in rows], dtype=float)
 
 
-def load_em_points(cell: Cell) -> np.ndarray:
-    """(N, 3) skeleton node positions in template microns, from the cell's first EM image with an SWC."""
+def _swc_text(cell: Cell) -> str:
+    """The cell's skeleton, from its first EM image with an SWC."""
     for im in cell.em_images:
         url = file_url(im.files, "AlignedBodySWC")
         if url:
-            return _parse_swc(fetch(url).read_text())
+            return fetch(url).read_text()
     raise NoSkeleton(f"no aligned skeleton for {cell.dataset} body {cell.body_id}")
+
+
+def load_em_points(cell: Cell) -> np.ndarray:
+    """(N, 3) skeleton node positions in template microns."""
+    return _parse_swc(_swc_text(cell))
+
+
+def load_em_segments(cell: Cell) -> np.ndarray:
+    """(M, 2, 3) skeleton edges (node, parent) in template microns, for drawing the cell as a connected tree."""
+    rows = [ln.split() for ln in _swc_text(cell).splitlines() if ln.strip() and not ln.lstrip().startswith("#")]
+    xyz = {int(r[0]): (float(r[2]), float(r[3]), float(r[4])) for r in rows}
+    segs = [(xyz[int(r[0])], xyz[int(r[6])]) for r in rows if int(r[6]) in xyz]
+    return np.array(segs, dtype=float).reshape(-1, 2, 3)
 
 
 def mirror_x(xyz: np.ndarray) -> np.ndarray:
