@@ -7,11 +7,10 @@ from pathlib import Path
 import pandas as pd
 
 from ..query import QueryError, resolve
-from ..rank import ALL_LIBRARIES, SPLIT_LIBRARIES, collect_candidates, rerank
+from ..rank import ALL_LIBRARIES, SPLIT_LIBRARIES, collect_candidates, nb_order, rerank
 from .groundtruth import OUT as GROUNDTRUTH
 
 RESULTS = Path(__file__).resolve().parents[3] / "results"
-FULL = 10**9
 COLUMNS = ["dataset", "body_id", "true_lines", "nb_rank", "nb3d_rank", "source",
            "in_top_n", "n_candidates", "tier", "error"]
 # Network/IO failures: skip the body without recording it, so a later resume retries it.
@@ -43,14 +42,14 @@ def evaluate_body(dataset: str, body_id: int, true_lines: set[str], top_n: int =
                   libraries: list[str] | None = None) -> dict:
     group = resolve(dataset, str(body_id))
     libs = libraries or SPLIT_LIBRARIES
-    full = collect_candidates(group, top_n=FULL, libraries=libs)
-    cands = full[:top_n]
+    full = nb_order(group, libraries=libs)
+    cands = collect_candidates(group, top_n=top_n, libraries=libs)
     ranked = rerank(group, cands)
     new_rank = rank_of_correct([r.line for r in ranked], true_lines)
     best_true = next((r for r in ranked if r.line in true_lines), None)
     return {
         "dataset": dataset, "body_id": body_id, "true_lines": ",".join(sorted(true_lines)),
-        "nb_rank": rank_of_correct([c.line for c in full], true_lines),
+        "nb_rank": rank_of_correct(full, true_lines),
         "nb3d_rank": new_rank,
         "source": best_true.source if best_true else None,
         "in_top_n": rank_of_correct([c.line for c in cands], true_lines) is not None,

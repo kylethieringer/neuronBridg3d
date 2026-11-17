@@ -127,6 +127,8 @@ def _stack_points(stack_url: str, channel: int, threshold: float | None) -> np.n
 
 
 def load_lm_points(hit: LmHit, prefer_3d: bool = True, threshold: float | None = None) -> LmPoints:
+    if hit.anatomical_area != "VNC":
+        raise ValueError(f"image {hit.image_id} is a {hit.anatomical_area} image; only VNC-template images can be decoded")
     stack_url = file_url(hit.files, "VisuallyLosslessStack")
     if prefer_3d and stack_url:
         return LmPoints(_stack_points(stack_url, hit.channel or 1, threshold), "3d")

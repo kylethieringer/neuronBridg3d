@@ -198,3 +198,11 @@ def test_points_cache_keyed_by_threshold_and_channel(monkeypatch):
     lm.load_lm_points(hit)
     lm.load_lm_points(hit, threshold=500.0)
     assert len(calls) == 2
+
+
+def test_load_lm_points_refuses_brain_images():
+    """Brain images are in another template (JRC2018_Unisex_20x_HR); decoding them as VNC gives wrong geometry."""
+    h = _hit({"CDM": "x/cdm.png", "VisuallyLosslessStack": "x/s.h5j"})
+    h.anatomical_area = "Brain"
+    with pytest.raises(ValueError, match="Brain"):
+        lm.load_lm_points(h)

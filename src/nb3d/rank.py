@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Callable, Literal
 
 import numpy as np
@@ -49,9 +49,9 @@ class RankedLine:
     reverse: float = 0.0  # best LM -> EM score over the line's images (high for lines labelling little else)
 
 
-def collect_candidates(group: QueryGroup, top_n: int = 200, libraries: list[str] | None = None) -> list[Candidate]:
-    """Union of NeuronBridge hits over the group's EM images, collapsed to lines by best
-    normalizedScore. The order (and nb_rank) is the NeuronBridge baseline."""
+def _nb_lines(group: QueryGroup, libraries: list[str] | None) -> list[tuple[str, list[LmHit]]]:
+    """NeuronBridge baseline: hits over all the group's EM images (VNC and, for BANC, brain), collapsed to
+    lines and ordered by best normalizedScore. Each line's hits are de-duplicated, best first."""
     libs = set(libraries or SPLIT_LIBRARIES)
     by_line: dict[str, list[LmHit]] = {}
     for cell in group.cells:
@@ -68,8 +68,39 @@ def collect_candidates(group: QueryGroup, top_n: int = 200, libraries: list[str]
                 best.append(h)
         ordered.append((line, best))
     ordered.sort(key=lambda lb: -lb[1][0].normalized_score)
-    return [Candidate(line, i + 1, hs[0].normalized_score, hs[:IMAGES_PER_LINE])
-            for i, (line, hs) in enumerate(ordered[:top_n])]
+    return ordered
+
+
+def nb_order(group: QueryGroup, libraries: list[str] | None = None) -> list[str]:
+    """All lines in NeuronBridge's order (the benchmark baseline), without preparing them for scoring."""
+    return [line for line, _ in _nb_lines(group, libraries)]
+
+
+def _vnc_hits(line: str, hits: list[LmHit]) -> list[LmHit]:
+    """Hits that can be scored against a VNC skeleton, best first. A brain-image hit (BANC bodies have a brain
+    EM image too) is replaced by the VNC image of the same fly, objective and channel, which shows the same
+    neuron's VNC part; it is dropped if the line has no such image."""
+    vnc_ims: list[dict] | None = None
+    out: dict[str, LmHit] = {}
+    for h in hits:
+        if h.anatomical_area != "VNC":
+            if vnc_ims is None:
+                vnc_ims = get_line_images(line)
+            im = next((im for im in vnc_ims if im.get("slideCode") == h.slide_code
+                       and im.get("objective") == h.objective and im.get("channel") == h.channel), None)
+            if im is None:
+                continue
+            h = replace(h, image_id=im["id"], library=im["libraryName"], files=im["files"],
+                        match_files={}, anatomical_area="VNC")
+        out.setdefault(h.image_id, h)
+    return list(out.values())
+
+
+def collect_candidates(group: QueryGroup, top_n: int = 200, libraries: list[str] | None = None) -> list[Candidate]:
+    """NeuronBridge's top ``top_n`` lines (order and nb_rank = the baseline), each with up to
+    IMAGES_PER_LINE VNC images to score. A line can end up with none (brain-only match, no VNC image)."""
+    return [Candidate(line, i + 1, hs[0].normalized_score, _vnc_hits(line, hs)[:IMAGES_PER_LINE])
+            for i, (line, hs) in enumerate(_nb_lines(group, libraries)[:top_n])]
 
 
 def find_full_expression_images(line: str, dataset: str) -> list[LmHit]:
@@ -120,13 +151,18 @@ def rerank(group: QueryGroup, candidates: list[Candidate], penalty: bool = False
             exprs = find_full_expression_images(cand.line, group.dataset)
             pen = "n/a" if not exprs else float(np.median(
                 [extra_expression_fraction(group_xyz, load_lm_points(e).xyz) for e in exprs]))
-        hit = best[1] or cand.hits[0]
+        hit = best[1] or (cand.hits[0] if cand.hits else None)
+        if hit is None:  # no VNC image to score (brain-only match): keep the line, ranked by NeuronBridge order at the bottom
+            source = "none"
+        else:
+            source = best[2] or ("3d" if "VisuallyLosslessStack" in hit.files else "2.5d")
         return RankedLine(
             line=cand.line, rank=0,
             score=combine(shape, pen if isinstance(pen, float) else None, weight),
-            shape=shape, source=best[2] or ("3d" if "VisuallyLosslessStack" in hit.files else "2.5d"),
-            mirrored=best[3], best_cell=best_cell, best_image_id=hit.image_id, per_cell=per_cell,
-            penalty=pen, nb_rank=cand.nb_rank, nb_score=cand.nb_score, library=hit.library, hits=cand.hits,
+            shape=shape, source=source,
+            mirrored=best[3], best_cell=best_cell, best_image_id=hit.image_id if hit else "", per_cell=per_cell,
+            penalty=pen, nb_rank=cand.nb_rank, nb_score=cand.nb_score, library=hit.library if hit else "",
+            hits=cand.hits,
             forward=forward if cand.hits else 0.0, reverse=reverse if cand.hits else 0.0,
         )
 
@@ -136,7 +172,7 @@ def rerank(group: QueryGroup, candidates: list[Candidate], penalty: bool = False
             results.append(r)
             if progress:
                 progress(i, len(candidates))
-    results.sort(key=lambda r: (-r.score, r.nb_rank))
+    results.sort(key=lambda r: (r.source == "none", -r.score, r.nb_rank))
     for i, r in enumerate(results, 1):
         r.rank = i
     return results

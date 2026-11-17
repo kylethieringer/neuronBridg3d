@@ -36,6 +36,7 @@ def test_evaluate_body(monkeypatch):
     full = [Candidate(l, i + 1, 100 - i, []) for i, l in enumerate(["A", "B", "C", "D", "E"])]
     monkeypatch.setattr(run, "resolve", lambda ds, q: "group")
     monkeypatch.setattr(run, "collect_candidates", lambda g, top_n=200, libraries=None: full[:top_n])
+    monkeypatch.setattr(run, "nb_order", lambda g, libraries=None: [c.line for c in full])
     monkeypatch.setattr(run, "rerank", lambda g, c, **kw: [_ranked("C", 1, 3, "2.5d"), _ranked("A", 2, 1), _ranked("B", 3, 2)])
     row = run.evaluate_body("manc", 7, {"C", "E"}, top_n=3)
     assert row["nb_rank"] == 3          # best NeuronBridge rank of a true line (full list)
@@ -49,6 +50,7 @@ def test_evaluate_body_true_line_beyond_cutoff(monkeypatch):
     full = [Candidate(l, i + 1, 100 - i, []) for i, l in enumerate(["A", "B", "C", "D", "E"])]
     monkeypatch.setattr(run, "resolve", lambda ds, q: "group")
     monkeypatch.setattr(run, "collect_candidates", lambda g, top_n=200, libraries=None: full[:top_n])
+    monkeypatch.setattr(run, "nb_order", lambda g, libraries=None: [c.line for c in full])
     monkeypatch.setattr(run, "rerank", lambda g, c, **kw: [_ranked("A", 1, 1), _ranked("B", 2, 2)])
     row = run.evaluate_body("manc", 7, {"E"}, top_n=2)
     assert row["nb_rank"] == 5 and row["nb3d_rank"] is None and row["in_top_n"] is False

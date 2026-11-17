@@ -48,6 +48,12 @@ async function runSearch(params) {
   }
 }
 
+function sourceLabel(r) {
+  if (r.source === "3d") return "3D";
+  if (r.source === "none") return '<span title="NeuronBridge matched this line only on a brain image, and it has no VNC image of the same fly to score">not scored</span>';
+  return "2.5D";
+}
+
 function fmtPenalty(p) {
   if (p === null || p === undefined) return "";
   if (p === "n/a") return "n/a";
@@ -75,7 +81,7 @@ function render() {
         <td>${r.score.toFixed(3)}</td>
         <td class="sub">${r.forward.toFixed(2)}</td>
         <td class="sub">${r.reverse.toFixed(2)}</td>
-        <td><span class="badge ${r.source === "3d" ? "d3" : ""}">${r.source === "3d" ? "3D" : "2.5D"}</span>${r.mirrored ? ' <span class="mir" title="matched on the mirrored side">↔</span>' : ""}</td>
+        <td><span class="badge ${r.source === "3d" ? "d3" : ""}">${sourceLabel(r)}</span>${r.mirrored ? ' <span class="mir" title="matched on the mirrored side">↔</span>' : ""}</td>
         <td title="NeuronBridge score ${r.nb_score}">${r.nb_rank}</td>
         <td>${fmtPenalty(r.penalty)}</td>
         <td class="verdict">${verdictButtons(r)}</td>
@@ -86,7 +92,7 @@ function render() {
       <div class="card${r.line === state.selected ? " sel" : ""}" data-line="${r.line}">
         <img loading="lazy" src="${r.thumbnail_url || ""}" alt="${r.line} colour-depth MIP">
         <div><strong>${r.rank}. ${r.line}</strong> · ${r.score.toFixed(3)}
-          <span class="badge ${r.source === "3d" ? "d3" : ""}">${r.source === "3d" ? "3D" : "2.5D"}</span><br>
+          <span class="badge ${r.source === "3d" ? "d3" : ""}">${sourceLabel(r)}</span><br>
           fwd ${r.forward.toFixed(2)} · rev ${r.reverse.toFixed(2)} · NB #${r.nb_rank} ${fmtPenalty(r.penalty)}</div>
       </div>`).join("");
   }

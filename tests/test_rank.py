@@ -90,6 +90,53 @@ def test_collect_default_libraries_split_only(fakes):
     assert [x.line for x in rank.collect_candidates(group(1), libraries=rank.ALL_LIBRARIES)] == ["R1", "SS1"]
 
 
+def brain_hit(image_id, line, score, slide="s1", obj="20x", ch=2):
+    h = hit(image_id, line, score)
+    h.anatomical_area, h.slide_code, h.objective, h.channel = "Brain", slide, obj, ch
+    return h
+
+
+def vnc_image(id_, slide="s1", obj="20x", ch=2, lib=SPLIT):
+    return {"id": id_, "libraryName": lib, "anatomicalArea": "VNC", "objective": obj, "channel": ch,
+            "publishedName": "SS1", "slideCode": slide,
+            "files": {"store": "v", "CDM": f"{id_}.png", "VisuallyLosslessStack": f"{id_}.h5j"}}
+
+
+def test_brain_hit_scored_by_same_fly_vnc_image(fakes, monkeypatch):
+    """BANC: a hit from the brain EM image is scored from the VNC image of the same slide, objective and channel."""
+    fakes["hits"]["em1"] = [brain_hit("b1", "SS1", 90)]
+    monkeypatch.setattr(rank, "get_line_images", lambda line: [
+        vnc_image("v_other_ch", ch=1), vnc_image("v_63x", obj="63x"), vnc_image("v", slide="s1"),
+        vnc_image("v_other_fly", slide="s9")])
+    [c] = rank.collect_candidates(group(1))
+    assert [h.image_id for h in c.hits] == ["v"]
+    assert c.hits[0].anatomical_area == "VNC" and c.hits[0].normalized_score == 90
+
+
+def test_brain_hit_without_vnc_image_is_dropped_but_line_kept(fakes, monkeypatch):
+    fakes["hits"]["em1"] = [brain_hit("b1", "SS1", 90), hit("a", "SS2", 80)]
+    monkeypatch.setattr(rank, "get_line_images", lambda line: [])
+    c = rank.collect_candidates(group(1))
+    assert [(x.line, x.nb_rank, len(x.hits)) for x in c] == [("SS1", 1, 0), ("SS2", 2, 1)]
+    fakes["shape"][(1, "a")] = ShapeScore(0.3, False)
+    r = {x.line: x for x in rank.rerank(group(1), c)}
+    assert r["SS1"].shape == 0.0 and r["SS1"].source == "none" and r["SS2"].rank == 1
+
+
+def test_brain_and_vnc_hits_merge_without_duplicates(fakes, monkeypatch):
+    fakes["hits"]["em1"] = [hit("v", "SS1", 70), brain_hit("b1", "SS1", 90), brain_hit("b2", "SS1", 50, slide="s2")]
+    monkeypatch.setattr(rank, "get_line_images", lambda line: [vnc_image("v"), vnc_image("w", slide="s2")])
+    [c] = rank.collect_candidates(group(1))
+    assert [h.image_id for h in c.hits] == ["v", "w"]  # b1 maps to v (already a VNC hit); b2 maps to w
+    assert c.nb_score == 90  # the baseline still uses the brain hit's score
+
+
+def test_nb_order_is_unchanged_by_brain_mapping(fakes, monkeypatch):
+    fakes["hits"]["em1"] = [brain_hit("b1", "SS1", 90), hit("a", "SS2", 80)]
+    monkeypatch.setattr(rank, "get_line_images", lambda line: [])
+    assert rank.nb_order(group(1)) == ["SS1", "SS2"]
+
+
 def test_rerank_orders_by_score(fakes):
     fakes["hits"]["em1"] = [hit("a", "SS1", 90), hit("b", "SS2", 80)]
     fakes["shape"][(1, "a")] = ShapeScore(0.2, False)

@@ -65,6 +65,7 @@ class LmHit:
     files: dict[str, str]
     objective: str | None = None
     match_files: dict[str, str] = field(default_factory=dict)
+    anatomical_area: str = "VNC"  # "Brain" images are in JRC2018_Unisex_20x_HR, not the VNC template
 
 
 def fetch_json(url: str) -> dict:
@@ -129,6 +130,7 @@ def get_cds_hits(em: EmImage) -> list[LmHit]:
             files=im["files"],
             objective=im.get("objective"),
             match_files=r.get("files", {}),
+            anatomical_area=im.get("anatomicalArea", "VNC"),
         ))
     return hits
 

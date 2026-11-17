@@ -44,6 +44,7 @@ def test_get_cds_hits_parses_fixture(offline):
     assert h.library == "FlyLight Split-GAL4 Omnibus Broad"
     assert h.channel == 1
     assert h.slide_code == "20160520_22_D5"
+    assert h.anatomical_area == "VNC"
     assert "CDM" in h.files
 
 
