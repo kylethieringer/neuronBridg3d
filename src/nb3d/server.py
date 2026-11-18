@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import verdicts
-from .em import TEMPLATE_UM, load_em_points, load_em_segments
+from .em import TEMPLATES, load_em_brain_points, load_em_points, load_em_segments
 from .lm import load_lm_points
 from .nbclient import LmHit, file_url
 from .query import QueryError, resolve
@@ -56,6 +56,8 @@ def _result_dict(r, dataset: str, query: str, verdict_map: dict) -> dict:
     return {
         "line": r.line, "rank": r.rank, "score": r.score, "shape": r.shape, "source": r.source,
         "forward": r.forward, "reverse": r.reverse,
+        "brain": r.brain, "brain_forward": r.brain_forward, "brain_reverse": r.brain_reverse,
+        "brain_image_id": r.brain_image_id, "brain_mirrored": r.brain_mirrored, "brain_source": r.brain_source,
         "mirrored": r.mirrored, "best_cell": str(r.best_cell), "best_image_id": r.best_image_id,
         "per_cell": {str(k): v for k, v in r.per_cell.items()}, "penalty": r.penalty,
         "nb_rank": r.nb_rank, "nb_score": r.nb_score, "library": r.library,
@@ -73,7 +75,7 @@ def _run_job(key: tuple, group, top_n: int, libs: list[str], penalty: bool, weig
     try:
         cands = collect_candidates(group, top_n=top_n, libraries=libs)
         for c in cands:
-            for h in c.hits:
+            for h in c.hits + c.brain_hits:
                 HITS[h.image_id] = h
         job["total"] = len(cands)
 
@@ -126,13 +128,19 @@ def geometry(dataset: str, body_ids: str, image_id: str, threshold: float | None
         return JSONResponse({"error": f"unknown image {image_id}; run a search first"}, status_code=404)
     ids = [int(b) for b in body_ids.split(",") if b.strip()]
     cells = {c.body_id: c for g in GROUPS.values() if g.dataset == dataset for c in g.cells}
-    em = {str(b): _subsample(load_em_points(cells[b])) for b in ids if b in cells}
-    em_segments = {str(b): np.round(load_em_segments(cells[b]).reshape(-1, 6), 2).tolist() for b in ids if b in cells}
+    template = TEMPLATES[hit.anatomical_area]
+    if hit.anatomical_area == "Brain":  # EM brain points come from a 2.5D render: no skeleton to draw as lines
+        em = {str(b): _subsample(p) for b in ids if b in cells and (p := load_em_brain_points(cells[b])) is not None}
+        em_segments = {}
+    else:
+        em = {str(b): _subsample(load_em_points(cells[b])) for b in ids if b in cells}
+        em_segments = {str(b): np.round(load_em_segments(cells[b]).reshape(-1, 6), 2).tolist() for b in ids if b in cells}
     lm = load_lm_points(hit, threshold=threshold)
-    x, y, z = TEMPLATE_UM
+    x, y, z = template.size_um
     out = {"em": em, "em_segments": em_segments, "lm": _subsample(lm.xyz), "lm_source": lm.source,
+           "template": hit.anatomical_area, "midline_x": template.midline_x_um,
            "template_outline": [[a, b, c] for a in (0, x) for b in (0, y) for c in (0, z)]}
-    if expression_line:
+    if expression_line and hit.anatomical_area == "VNC":  # expression images are VNC-only
         exprs = find_full_expression_images(expression_line, dataset)
         if exprs:
             e = load_lm_points(exprs[0])

@@ -57,7 +57,7 @@
       </div>
       <table id="results" hidden>
         <thead><tr>
-          <th class="sortable" data-sort="rank" title="nb3d rank (sort by score)">#</th><th>Line</th><th class="sortable" data-sort="score" title="Mean of forward and reverse: the cell, and little else">Score</th><th class="sortable" data-sort="forward" title="Forward (EM → LM): is the whole cell in the image? High for any line containing it, broad lines included — useful for split-GAL4 hemidrivers">Fwd</th><th class="sortable" data-sort="reverse" title="Reverse (LM → EM): is the image only the cell? Low when the line labels much else">Rev</th><th></th><th class="sortable" data-sort="nb_rank" title="NeuronBridge rank">NB #</th><th>Penalty</th><th>Verdict</th><th></th>
+          <th class="sortable" data-sort="rank" title="nb3d rank (sort by score)">#</th><th>Line</th><th class="sortable" data-sort="score" title="Mean of forward and reverse: the cell, and little else">Score</th><th class="sortable" data-sort="forward" title="Forward (EM → LM): is the whole cell in the image? High for any line containing it, broad lines included — useful for split-GAL4 hemidrivers">Fwd</th><th class="sortable" data-sort="reverse" title="Reverse (LM → EM): is the image only the cell? Low when the line labels much else">Rev</th><th></th><th class="sortable brainCol" data-sort="brain" title="Brain score: the same mean of forward and reverse, against the EM cell's brain part (BANC only; from the EM brain colour-depth render). Not used for the # rank">Brain</th><th class="sortable brainCol" data-sort="brain_forward" title="Brain forward (EM → LM)">B fwd</th><th class="sortable brainCol" data-sort="brain_reverse" title="Brain reverse (LM → EM): low when the line labels much else in the brain">B rev</th><th class="sortable" data-sort="nb_rank" title="NeuronBridge rank">NB #</th><th>Penalty</th><th>Verdict</th><th></th>
         </tr></thead>
         <tbody></tbody>
       </table>
@@ -76,6 +76,7 @@
         <label>LM opacity <input type="range" id="opacity" min="0.05" max="1" step="0.05" value="0.35"></label>
         <label><input type="checkbox" id="mirror"> Mirror EM</label>
         <label><input type="checkbox" id="showExpr"> Full expression</label>
+        <label title="Show the line's best brain image with the EM cell's brain part"><input type="checkbox" id="showBrain" disabled> Brain</label>
         <button type="button" id="resetView">Reset view</button>
       </div>
       <div class="legend"><span class="sw em"></span>EM cells <span class="sw lm"></span>LM image <span class="sw ex"></span>full expression</div>

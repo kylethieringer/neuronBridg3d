@@ -12,7 +12,8 @@ from .groundtruth import OUT as GROUNDTRUTH
 
 RESULTS = Path(__file__).resolve().parents[3] / "results"
 COLUMNS = ["dataset", "body_id", "true_lines", "nb_rank", "nb3d_rank", "source",
-           "in_top_n", "n_candidates", "tier", "error"]
+           "in_top_n", "n_candidates", "tier", "error",
+           "n_brain_lines", "nb3d_rank_brain_set", "nb3d_brain_rank", "brain_source"]
 # Network/IO failures: skip the body without recording it, so a later resume retries it.
 TRANSIENT = (OSError, ConnectionError, TimeoutError)
 
@@ -47,6 +48,11 @@ def evaluate_body(dataset: str, body_id: int, true_lines: set[str], top_n: int =
     ranked = rerank(group, cands)
     new_rank = rank_of_correct([r.line for r in ranked], true_lines)
     best_true = next((r for r in ranked if r.line in true_lines), None)
+    # Brain vs VNC, head to head on the same lines: only lines with a brain score (a 20x brain image), ranked
+    # once by VNC score (nb3d order) and once by brain score. None when no correct line has a brain score.
+    brain_set = [r for r in ranked if r.brain is not None]
+    by_brain = sorted(brain_set, key=lambda r: (-r.brain, r.rank))
+    best_brain = next((r for r in by_brain if r.line in true_lines), None)
     return {
         "dataset": dataset, "body_id": body_id, "true_lines": ",".join(sorted(true_lines)),
         "nb_rank": rank_of_correct(full, true_lines),
@@ -54,6 +60,10 @@ def evaluate_body(dataset: str, body_id: int, true_lines: set[str], top_n: int =
         "source": best_true.source if best_true else None,
         "in_top_n": rank_of_correct([c.line for c in cands], true_lines) is not None,
         "n_candidates": len(cands),
+        "n_brain_lines": len(brain_set),
+        "nb3d_rank_brain_set": rank_of_correct([r.line for r in brain_set], true_lines),
+        "nb3d_brain_rank": rank_of_correct([r.line for r in by_brain], true_lines),
+        "brain_source": best_brain.brain_source if best_brain else None,
     }
 
 
@@ -66,11 +76,14 @@ def _libs_tag(libraries: list[str]) -> str:
 
 
 def run_benchmark(dataset: str = "manc", tier: int | None = None, limit: int | None = None,
-                  top_n: int = 200, libraries: list[str] | None = None, out: Path | None = None) -> pd.DataFrame:
+                  top_n: int = 200, libraries: list[str] | None = None, out: Path | None = None,
+                  body_ids: list[int] | None = None) -> pd.DataFrame:
     gt = pd.read_csv(GROUNDTRUTH)
     gt = gt[gt.dataset == dataset]
     if tier is not None:
         gt = gt[gt.tier == tier]
+    if body_ids is not None:
+        gt = gt[gt.body_id.isin(body_ids)]
     bodies = gt.groupby("body_id").agg(lines=("line", set), tier=("tier", "min"))
     if limit:
         bodies = bodies.head(limit)

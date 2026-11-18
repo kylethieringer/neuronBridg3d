@@ -7,7 +7,7 @@ import navis
 import numpy as np
 from scipy.spatial import cKDTree
 
-from .em import mirror_x
+from .em import VNC, Template, mirror_x
 from .lm import LmPoints
 
 K = 5  # neighbours for dotprops tangents
@@ -32,14 +32,14 @@ def _forward_nblast(q: navis.Dotprops, t: navis.Dotprops) -> float:
     return float(np.asarray(res)[0, 0])
 
 
-def shape_score(em_xyz: np.ndarray, lm: LmPoints) -> ShapeScore:
+def shape_score(em_xyz: np.ndarray, lm: LmPoints, template: Template = VNC) -> ShapeScore:
     """Mean of forward (EM -> LM) and reverse (LM -> EM) NBLAST, each normalised to its query's self-score.
     The reverse term penalises LM signal away from the cell, so broad images no longer outscore sparse
     ones. Scored for the EM cell and its mirror image; the better one is kept."""
     if len(lm.xyz) <= K or len(em_xyz) <= K:
         return ShapeScore(0.0, False)
     lm_dp = _dotprops(lm.xyz)
-    em_dp, em_m_dp = _dotprops(em_xyz), _dotprops(mirror_x(em_xyz))
+    em_dp, em_m_dp = _dotprops(em_xyz), _dotprops(mirror_x(em_xyz, template))
     fwd, fwd_m = _forward_nblast(em_dp, lm_dp), _forward_nblast(em_m_dp, lm_dp)
     rev, rev_m = _forward_nblast(lm_dp, em_dp), _forward_nblast(lm_dp, em_m_dp)
     direct, mirrored = (fwd + rev) / 2, (fwd_m + rev_m) / 2

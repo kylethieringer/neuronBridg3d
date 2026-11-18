@@ -66,3 +66,18 @@ def test_file_url_resolves_store_prefix():
         "https://s3.amazonaws.com/janelia-flylight-imagery/Gen1+MCFO/VT1/x.h5j"
     assert nbclient.file_url(files, "CDM") == "https://s3.amazonaws.com/janelia-flylight-color-depth/a/b.png"
     assert nbclient.file_url(files, "Gal4Expression") is None
+
+
+def test_em_images_carry_anatomical_area(monkeypatch):
+    """BANC bodies have a VNC and a Brain EM image; the area says which template each is in."""
+    def fake(url):
+        return {"results": [
+            {"id": "v", "libraryName": "FlyWire_BANC_v626", "anatomicalArea": "VNC", "files": {}},
+            {"id": "b", "libraryName": "FlyWire_BANC_v626", "anatomicalArea": "Brain", "files": {}},
+        ]}
+    monkeypatch.setattr(nbclient, "fetch_json", fake)
+    assert [(e.id, e.anatomical_area) for e in nbclient.get_em_images("banc", 1)] == [("v", "VNC"), ("b", "Brain")]
+
+
+def test_em_image_area_defaults_to_vnc(offline):
+    assert nbclient.get_em_images("manc", 10123)[0].anatomical_area == "VNC"

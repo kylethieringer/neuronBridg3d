@@ -7,7 +7,7 @@ from typing import Callable, Literal
 
 import numpy as np
 
-from .em import load_em_points
+from .em import BRAIN, VNC, load_em_brain_points, load_em_points
 from .lm import LmPoints, load_lm_points
 from .nbclient import LmHit, get_cds_hits, get_line_images
 from .query import QueryGroup
@@ -26,7 +26,8 @@ class Candidate:
     line: str
     nb_rank: int
     nb_score: float
-    hits: list[LmHit]
+    hits: list[LmHit]  # VNC images, scored for the ranking
+    brain_hits: list[LmHit] = field(default_factory=list)  # 20x brain images, scored separately (BANC)
 
 
 @dataclass
@@ -47,6 +48,15 @@ class RankedLine:
     hits: list[LmHit] = field(default_factory=list)
     forward: float = 0.0  # best EM -> LM score over the line's images (high for any line containing the cell)
     reverse: float = 0.0  # best LM -> EM score over the line's images (high for lines labelling little else)
+    # Brain-template score against the EM cell's brain points, reported beside the VNC score and not used for
+    # the rank. None when the line has no 20x brain hit or the EM cells have no brain image (MANC). Not clamped
+    # at 0, so negative scores keep their order.
+    brain: float | None = None
+    brain_forward: float | None = None
+    brain_reverse: float | None = None
+    brain_image_id: str = ""
+    brain_mirrored: bool = False
+    brain_source: str | None = None
 
 
 def _nb_lines(group: QueryGroup, libraries: list[str] | None) -> list[tuple[str, list[LmHit]]]:
@@ -99,8 +109,13 @@ def _vnc_hits(line: str, hits: list[LmHit]) -> list[LmHit]:
 def collect_candidates(group: QueryGroup, top_n: int = 200, libraries: list[str] | None = None) -> list[Candidate]:
     """NeuronBridge's top ``top_n`` lines (order and nb_rank = the baseline), each with up to
     IMAGES_PER_LINE VNC images to score. A line can end up with none (brain-only match, no VNC image)."""
-    return [Candidate(line, i + 1, hs[0].normalized_score, _vnc_hits(line, hs)[:IMAGES_PER_LINE])
+    return [Candidate(line, i + 1, hs[0].normalized_score, _vnc_hits(line, hs)[:IMAGES_PER_LINE], _brain_hits(hs))
             for i, (line, hs) in enumerate(_nb_lines(group, libraries)[:top_n])]
+
+
+def _brain_hits(hits: list[LmHit]) -> list[LmHit]:
+    """The line's 20x brain hits (already de-duplicated, best first), up to IMAGES_PER_LINE."""
+    return [h for h in hits if h.anatomical_area == "Brain" and h.objective == "20x"][:IMAGES_PER_LINE]
 
 
 def find_full_expression_images(line: str, dataset: str) -> list[LmHit]:
@@ -131,6 +146,22 @@ def rerank(group: QueryGroup, candidates: list[Candidate], penalty: bool = False
            progress: Callable[[int, int], None] | None = None) -> list[RankedLine]:
     em_pts = {c.body_id: load_em_points(c) for c in group.cells}
     group_xyz = np.vstack(list(em_pts.values()))
+    em_brain = {c.body_id: p for c in group.cells if (p := load_em_brain_points(c)) is not None}
+
+    def score_brain(cand: Candidate) -> dict:
+        """Best brain-template score over the line's brain images and the group's cells."""
+        if not em_brain or not cand.brain_hits:
+            return {}
+        best, fwd, rev = None, float("-inf"), float("-inf")
+        for h in cand.brain_hits:
+            lm = load_lm_points(h)
+            for xyz in em_brain.values():
+                s = shape_score(xyz, lm, BRAIN)
+                fwd, rev = max(fwd, s.forward), max(rev, s.reverse)
+                if best is None or s.value > best[0]:
+                    best = (s.value, h, lm.source, s.mirrored)
+        return dict(brain=best[0], brain_forward=fwd, brain_reverse=rev, brain_image_id=best[1].image_id,
+                    brain_mirrored=best[3], brain_source=best[2])
 
     def score_line(cand: Candidate) -> RankedLine:
         per_cell: dict[int, float] = {}
@@ -140,7 +171,7 @@ def rerank(group: QueryGroup, candidates: list[Candidate], penalty: bool = False
         for h in cand.hits:
             lm: LmPoints = load_lm_points(h)
             for body, xyz in em_pts.items():
-                s = shape_score(xyz, lm)
+                s = shape_score(xyz, lm, VNC)
                 per_cell[body] = max(per_cell.get(body, 0.0), s.value)
                 forward, reverse = max(forward, s.forward), max(reverse, s.reverse)
                 if s.value > best[0]:
@@ -164,6 +195,7 @@ def rerank(group: QueryGroup, candidates: list[Candidate], penalty: bool = False
             penalty=pen, nb_rank=cand.nb_rank, nb_score=cand.nb_score, library=hit.library if hit else "",
             hits=cand.hits,
             forward=forward if cand.hits else 0.0, reverse=reverse if cand.hits else 0.0,
+            **score_brain(cand),
         )
 
     results: list[RankedLine] = []

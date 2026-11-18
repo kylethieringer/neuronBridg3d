@@ -29,17 +29,23 @@ def group(*body_ids):
 @pytest.fixture
 def fakes(monkeypatch):
     """hits per EM image; shape per (body_id, image_id); LM/expression points per image id."""
-    state = {"hits": {}, "shape": {}, "points": {}, "expr": {}}
+    state = {"hits": {}, "shape": {}, "points": {}, "expr": {}, "brain_cells": set(), "templates": {}}
     monkeypatch.setattr(rank, "get_cds_hits", lambda em: state["hits"].get(em.id, []))
     monkeypatch.setattr(rank, "load_em_points", lambda cell: np.array([[float(cell.body_id), 0, 0]]))
+    monkeypatch.setattr(rank, "load_em_brain_points", lambda cell: np.array([[float(cell.body_id), 1, 0]])
+                        if cell.body_id in state["brain_cells"] else None)
 
     def fake_lm(h, prefer_3d=True, threshold=None):
         src = "3d" if "VisuallyLosslessStack" in h.files else "2.5d"
         return LmPoints(state["points"].get(h.image_id, np.zeros((10, 3))), src)
 
     monkeypatch.setattr(rank, "load_lm_points", fake_lm)
-    monkeypatch.setattr(rank, "shape_score",
-                        lambda em_xyz, lm_pts: state["shape"].get(state["_cur"](em_xyz, lm_pts), ShapeScore(0.0, False)))
+    def fake_shape(em_xyz, lm_pts, template=None):
+        key = state["_cur"](em_xyz, lm_pts)
+        state["templates"][key[1]] = (template or rank.VNC).name
+        return state["shape"].get(key, ShapeScore(0.0, False))
+
+    monkeypatch.setattr(rank, "shape_score", fake_shape)
     # map (em body, lm points identity) -> key
     state["_cur"] = lambda em_xyz, lm_pts: (int(em_xyz[0, 0]), state["_ids"].get(id(lm_pts.xyz)))
     state["_ids"] = {}
@@ -268,3 +274,55 @@ def test_full_expression_gen1_uses_gal4_expression(monkeypatch):
 def test_full_expression_none(monkeypatch):
     monkeypatch.setattr(rank, "get_line_images", lambda line: [])
     assert rank.find_full_expression_images("SS9", "manc") == []
+
+
+def test_collect_keeps_20x_brain_hits_for_brain_scoring(fakes, monkeypatch):
+    fakes["hits"]["em1"] = [brain_hit("b1", "SS1", 90), brain_hit("b63", "SS1", 85, obj="63x"),
+                            brain_hit("b2", "SS1", 80, slide="s2"), hit("v", "SS1", 70)]
+    monkeypatch.setattr(rank, "get_line_images", lambda line: [vnc_image("w")])
+    [c] = rank.collect_candidates(group(1))
+    assert [h.image_id for h in c.brain_hits] == ["b1", "b2"]  # best first; 63x left out
+    assert all(h.anatomical_area == "Brain" for h in c.brain_hits)
+    assert [h.image_id for h in c.hits] == ["w", "v"]  # VNC scoring unchanged
+
+
+def test_brain_score_reported_separately_and_rank_unchanged(fakes, monkeypatch):
+    fakes["brain_cells"] = {1}
+    fakes["hits"]["em1"] = [hit("va", "SS1", 90), hit("vb", "SS2", 80), brain_hit("ba", "SS1", 70),
+                            brain_hit("bb", "SS2", 60, slide="s2")]
+    monkeypatch.setattr(rank, "get_line_images", lambda line: [])
+    fakes["shape"][(1, "va")] = ShapeScore(0.6, False, forward=0.7, reverse=0.5)
+    fakes["shape"][(1, "vb")] = ShapeScore(0.3, False)
+    fakes["shape"][(1, "ba")] = ShapeScore(0.2, False, forward=0.3, reverse=0.1)
+    fakes["shape"][(1, "bb")] = ShapeScore(0.8, True, forward=0.9, reverse=0.7)
+    g = group(1)
+    r = rank.rerank(g, rank.collect_candidates(g))
+    assert [(x.line, x.rank) for x in r] == [("SS1", 1), ("SS2", 2)]  # still by VNC score
+    ss1, ss2 = r
+    assert ss1.score == pytest.approx(0.6) and ss1.brain == pytest.approx(0.2)
+    assert (ss2.brain, ss2.brain_forward, ss2.brain_reverse) == (pytest.approx(0.8), pytest.approx(0.9), pytest.approx(0.7))
+    assert ss2.brain_image_id == "bb" and ss2.brain_mirrored is True and ss2.brain_source == "3d"
+    assert fakes["templates"]["ba"] == "JRC2018_Unisex_20x_HR" and fakes["templates"]["va"] == "JRC2018_VNC_Unisex_40x_DS"
+
+
+def test_brain_score_none_without_brain_image_or_em_brain(fakes, monkeypatch):
+    fakes["hits"]["em1"] = [hit("va", "SS1", 90), brain_hit("bb", "SS2", 60)]
+    monkeypatch.setattr(rank, "get_line_images", lambda line: [])
+    g = group(1)
+    r = {x.line: x for x in rank.rerank(g, rank.collect_candidates(g))}
+    assert r["SS2"].brain is None  # brain hit, but the EM cell has no brain image (e.g. MANC)
+    fakes["brain_cells"] = {1}
+    r = {x.line: x for x in rank.rerank(g, rank.collect_candidates(g))}
+    assert r["SS1"].brain is None and r["SS1"].brain_image_id == ""  # no brain image of this line
+    assert r["SS2"].brain is not None
+
+
+def test_brain_score_not_clamped(fakes, monkeypatch):
+    """Negative brain scores keep their order instead of tying at 0."""
+    fakes["brain_cells"] = {1}
+    fakes["hits"]["em1"] = [hit("va", "SS1", 90), brain_hit("ba", "SS1", 70)]
+    monkeypatch.setattr(rank, "get_line_images", lambda line: [])
+    fakes["shape"][(1, "ba")] = ShapeScore(-0.2, False, forward=0.1, reverse=-0.5)
+    g = group(1)
+    [r] = rank.rerank(g, rank.collect_candidates(g))
+    assert r.brain == pytest.approx(-0.2)

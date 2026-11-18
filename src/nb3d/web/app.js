@@ -8,7 +8,12 @@ const SORTS = {
   rank: (a, b) => a.rank - b.rank, score: (a, b) => b.score - a.score || a.rank - b.rank,
   forward: (a, b) => b.forward - a.forward || a.rank - b.rank, reverse: (a, b) => b.reverse - a.reverse || a.rank - b.rank,
   nb_rank: (a, b) => a.nb_rank - b.nb_rank,
+  brain: byBrain("brain"), brain_forward: byBrain("brain_forward"), brain_reverse: byBrain("brain_reverse"),
 };
+// Brain scores: descending, lines without a brain score last.
+function byBrain(k) { return (a, b) => (a[k] === null) - (b[k] === null) || (b[k] ?? 0) - (a[k] ?? 0) || a.rank - b.rank; }
+const fmt = (v, d) => (v === null || v === undefined ? "–" : v.toFixed(d));
+const hasBrain = () => state.results.some(r => r.brain !== null);
 const sorted = () => [...state.results].sort(SORTS[state.sort]);
 
 function setStatus(msg, error = false) {
@@ -74,6 +79,7 @@ function render() {
   $("viewGrid").classList.toggle("on", !showList);
   if (showList) {
     document.querySelectorAll("#results th[data-sort]").forEach(th => th.classList.toggle("on", th.dataset.sort === state.sort));
+    $("results").classList.toggle("noBrain", !hasBrain());
     $("results").querySelector("tbody").innerHTML = sorted().map(r => `
       <tr data-line="${r.line}" class="${r.line === state.selected ? "sel" : ""}">
         <td>${r.rank}</td>
@@ -82,6 +88,9 @@ function render() {
         <td class="sub">${r.forward.toFixed(2)}</td>
         <td class="sub">${r.reverse.toFixed(2)}</td>
         <td><span class="badge ${r.source === "3d" ? "d3" : ""}">${sourceLabel(r)}</span>${r.mirrored ? ' <span class="mir" title="matched on the mirrored side">↔</span>' : ""}</td>
+        <td class="brainCol">${fmt(r.brain, 3)}${r.brain_mirrored ? ' <span class="mir" title="matched on the mirrored side">↔</span>' : ""}</td>
+        <td class="sub brainCol">${fmt(r.brain_forward, 2)}</td>
+        <td class="sub brainCol">${fmt(r.brain_reverse, 2)}</td>
         <td title="NeuronBridge score ${r.nb_score}">${r.nb_rank}</td>
         <td>${fmtPenalty(r.penalty)}</td>
         <td class="verdict">${verdictButtons(r)}</td>
@@ -93,7 +102,7 @@ function render() {
         <img loading="lazy" src="${r.thumbnail_url || ""}" alt="${r.line} colour-depth MIP">
         <div><strong>${r.rank}. ${r.line}</strong> · ${r.score.toFixed(3)}
           <span class="badge ${r.source === "3d" ? "d3" : ""}">${sourceLabel(r)}</span><br>
-          fwd ${r.forward.toFixed(2)} · rev ${r.reverse.toFixed(2)} · NB #${r.nb_rank} ${fmtPenalty(r.penalty)}</div>
+          fwd ${r.forward.toFixed(2)} · rev ${r.reverse.toFixed(2)}${r.brain !== null ? ` · brain ${r.brain.toFixed(3)}` : ""} · NB #${r.nb_rank} ${fmtPenalty(r.penalty)}</div>
       </div>`).join("");
   }
 }
@@ -103,16 +112,21 @@ async function loadGeometry() {
   if (!r) return;
   const ids = state.cells.map(c => c.body_id).join(",");
   const thr = Number($("threshold").value);
-  const qs = new URLSearchParams({ dataset: state.params.dataset, body_ids: ids, image_id: r.best_image_id });
+  $("showBrain").disabled = !r.brain_image_id;
+  const brain = $("showBrain").checked && !!r.brain_image_id;
+  const imageId = brain ? r.brain_image_id : r.best_image_id;
+  const qs = new URLSearchParams({ dataset: state.params.dataset, body_ids: ids, image_id: imageId });
   if (thr > 0) qs.set("threshold", thr);
-  if ($("showExpr").checked) qs.set("expression_line", r.line);
+  if ($("showExpr").checked && !brain) qs.set("expression_line", r.line);
   $("viewerTitle").textContent = `${r.line} — loading…`;
   const res = await fetch(`/api/geometry?${qs}`);
   const g = await res.json();
   if (!res.ok) { $("viewerTitle").textContent = g.error; return; }
-  viewer.setData({ em: g.em, em_segments: g.em_segments, lm: g.lm, template_outline: g.template_outline, expression: g.expression });
-  const img = r.images.find(i => i.image_id === r.best_image_id) || {};
-  $("viewerTitle").textContent = `${r.line} · ${img.library || ""} ${img.slide_code || ""} ch${img.channel ?? ""} · ${g.lm_source === "3d" ? "3D stack" : "2.5D from CDM"}${g.expression ? " · full expression shown" : ""}`;
+  viewer.setData({ em: g.em, em_segments: g.em_segments, lm: g.lm, template_outline: g.template_outline, expression: g.expression,
+                   template: g.template, midline_x: g.midline_x });
+  const img = r.images.find(i => i.image_id === imageId) || {};
+  const where = brain ? `brain image ${imageId} · EM brain part from its colour-depth render` : `${img.library || ""} ${img.slide_code || ""} ch${img.channel ?? ""}`;
+  $("viewerTitle").textContent = `${r.line} · ${where} · ${g.lm_source === "3d" ? "3D stack" : "2.5D from CDM"}${g.expression ? " · full expression shown" : ""}`;
   $("cellToggles").innerHTML = state.cells.map(c => `
     <label title="${c.cell_type || ""}"><input type="checkbox" data-cell="${c.body_id}" checked> ${c.body_id}${c.side ? " " + c.side : ""}${c.segment ? " " + c.segment : ""}${String(r.best_cell) === c.body_id ? " ★" : ""}</label>`).join("");
 }
@@ -162,4 +176,5 @@ $("psize").addEventListener("input", () => viewer.setPointSize(Number($("psize")
 $("opacity").addEventListener("input", () => viewer.setOpacity(Number($("opacity").value)));
 $("mirror").addEventListener("change", () => viewer.setMirror($("mirror").checked));
 $("showExpr").addEventListener("change", loadGeometry);
+$("showBrain").addEventListener("change", loadGeometry);
 $("resetView").addEventListener("click", () => viewer.resetView());

@@ -61,3 +61,49 @@ def test_load_em_segments_real_skeleton_is_connected(monkeypatch):
     seg = em.load_em_segments(make_cell())
     rows = [ln.split() for ln in (FIX / "em_sample.swc").read_text().splitlines() if ln.strip() and not ln.startswith("#")]
     assert len(seg) == sum(r[6] != "-1" for r in rows)  # one segment per non-root node (this skeleton has 2 roots)
+
+
+def test_brain_template_geometry():
+    """JRC2018_Unisex_20x_HR, from a brain H5J header: 1210 x 566 x 174 px at 0.5189 x 0.5189 x 1.0 um."""
+    b = em.BRAIN
+    assert b.px == (1210, 566, 174)
+    assert b.voxel_um == pytest.approx((0.5189161, 0.5189161, 1.0))
+    assert b.midline_x_um == pytest.approx(1210 * 0.5189161 / 2)
+    assert b.label_strip_px == 0
+    assert em.VNC.px == em.TEMPLATE_PX and em.VNC.midline_x_um == pytest.approx(em.MIDLINE_X_UM)
+
+
+def test_mirror_uses_template_midline():
+    pts = np.array([[em.BRAIN.midline_x_um - 10, 1.0, 2.0]])
+    assert em.mirror_x(pts, em.BRAIN)[0] == pytest.approx([em.BRAIN.midline_x_um + 10, 1.0, 2.0])
+
+
+def _banc_cell(with_brain=True):
+    ims = [EmImage(id="v", dataset="banc", body_id=5, neuron_type=None,
+                   files={"store": "fl:open_data:vnc", "AlignedBodySWC": "v/SWC/5.swc"})]
+    if with_brain:
+        ims.append(EmImage(id="b", dataset="banc", body_id=5, neuron_type=None, anatomical_area="Brain",
+                           files={"store": "fl:open_data:brain", "CDM": "JRC2018_Unisex_20x_HR/BANC/5-CDM.png"}))
+    return Cell("banc", 5, "DNp26", "L", None, ims)
+
+
+def test_load_em_brain_points_from_brain_cdm(monkeypatch, tmp_path):
+    """NeuronBridge gives no brain-frame skeleton (the brain SWC is the VNC one), so brain points come from
+    the EM neuron's brain CDM, decoded in brain geometry."""
+    from PIL import Image
+    from nb3d import cdm25d
+    rgb = np.zeros((566, 1210, 3), dtype=np.uint8)
+    rgb[200:300, 700] = cdm25d.LUT[128]
+    f = tmp_path / "em_brain.png"
+    Image.fromarray(rgb).save(f)
+    seen = []
+    monkeypatch.setattr(em, "fetch", lambda url: seen.append(url) or f)
+    xyz = em.load_em_brain_points(_banc_cell())
+    assert seen == ["https://s3.amazonaws.com/janelia-flylight-color-depth/JRC2018_Unisex_20x_HR/BANC/5-CDM.png"]
+    assert xyz.shape == (100, 3)
+    assert xyz[:, 0] == pytest.approx(700 * em.BRAIN.voxel_um[0])
+    assert xyz[:, 2] == pytest.approx(128 / 255 * 173, abs=1.0)
+
+
+def test_load_em_brain_points_none_without_brain_image():
+    assert em.load_em_brain_points(_banc_cell(with_brain=False)) is None

@@ -65,3 +65,6 @@ section { background: var(--panel); border: 1px solid var(--line); border-radius
 #results th.sortable:hover { text-decoration: underline; }
 #results th.sortable.on::after { content: " ▾"; }
 #results td.sub { color: var(--muted, #777); font-variant-numeric: tabular-nums; }
+
+/* Brain-score columns: hidden when no line has one (MANC) */
+#results.noBrain .brainCol { display: none; }

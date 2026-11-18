@@ -193,16 +193,72 @@ def test_points_cache_keyed_by_threshold_and_channel(monkeypatch):
     monkeypatch.setattr(lm, "fetch_transient", _stack_fixture)
     calls = []
     real = lm.decode_h5j
-    monkeypatch.setattr(lm, "decode_h5j", lambda p, ch: calls.append(ch) or real(p, ch))
+    monkeypatch.setattr(lm, "decode_h5j", lambda p, ch, nz=219: calls.append(ch) or real(p, ch, nz))
     hit = _hit({"VisuallyLosslessStack": "x/s.h5j"})
     lm.load_lm_points(hit)
     lm.load_lm_points(hit, threshold=500.0)
     assert len(calls) == 2
 
 
-def test_load_lm_points_refuses_brain_images():
-    """Brain images are in another template (JRC2018_Unisex_20x_HR); decoding them as VNC gives wrong geometry."""
-    h = _hit({"CDM": "x/cdm.png", "VisuallyLosslessStack": "x/s.h5j"})
+def test_cdm_to_points_brain_geometry():
+    """Brain CDMs are 566 x 1210 with no label strip; z spans 174 slices of 1 um."""
+    from nb3d.em import BRAIN
+    rgb = np.zeros((566, 1210, 3), dtype=np.uint8)
+    rgb[0, 900] = cdm25d.LUT[0]  # (outside the label box, top right)
+    rgb[565, 5] = cdm25d.LUT[255]
+    pts = cdm25d.cdm_to_points(rgb, template=BRAIN)
+    pts = pts[np.argsort(pts[:, 0])]
+    assert pts[0] == pytest.approx([5 * BRAIN.voxel_um[0], 565 * BRAIN.voxel_um[1], 173.0], abs=1.0)
+    assert pts[1] == pytest.approx([900 * BRAIN.voxel_um[0], 0.0, 0.0], abs=1.0)
+
+
+def test_load_lm_points_decodes_brain_cdm_in_brain_geometry(monkeypatch, tmp_path):
+    from nb3d.em import BRAIN
+    rgb = np.zeros((566, 1210, 3), dtype=np.uint8)
+    rgb[100:400, 1000:1004] = (255, 0, 200)
+    f = tmp_path / "brain.png"
+    Image.fromarray(rgb).save(f)
+    monkeypatch.setattr(lm, "fetch", lambda url: f)
+    h = _hit({"CDM": "x/brain.png"})
     h.anatomical_area = "Brain"
-    with pytest.raises(ValueError, match="Brain"):
-        lm.load_lm_points(h)
+    p = lm.load_lm_points(h)
+    assert p.source == "2.5d" and len(p.xyz) == 1200
+    assert p.xyz[:, 0].min() == pytest.approx(1000 * BRAIN.voxel_um[0])  # beyond the VNC template's 264 um width
+    assert p.xyz[:, 1].max() <= 566 * BRAIN.voxel_um[1]
+
+
+def test_decode_h5j_pads_to_requested_depth():
+    vol = lm.decode_h5j(FIX / "stack_sample.h5j", channel=1, nz=230)
+    assert vol.shape == (230, 1119, 573)
+
+
+def test_brain_cdm_label_box_ignored():
+    """Brain CDMs draw the colour bar and 'Max: n/4095' label inside the image (top right); it is not signal."""
+    from nb3d.em import BRAIN
+    rgb = np.zeros((566, 1210, 3), dtype=np.uint8)
+    rgb[5:30, 960:1200] = cdm25d.LUT[200]      # colour bar
+    rgb[40:70, 970:1190] = 255                 # white label text
+    rgb[300, 600] = cdm25d.LUT[100]            # one real pixel
+    pts = cdm25d.cdm_to_points(rgb, template=BRAIN)
+    assert len(pts) == 1 and pts[0, 0] == pytest.approx(600 * BRAIN.voxel_um[0])
+
+
+def test_brain_and_vnc_stack_points_cached_separately(monkeypatch):
+    """A stack decoded with one template's geometry must not be reused for the other (the first BANC run cached
+    brain stacks with VNC geometry)."""
+    from nb3d.em import BRAIN, VNC
+    monkeypatch.setattr(lm, "fetch_transient", _stack_fixture)
+    calls = []
+    real = lm.decode_h5j
+    monkeypatch.setattr(lm, "decode_h5j", lambda p, ch, nz=219: calls.append(nz) or real(p, ch, nz))
+    lm._stack_points("u/s.h5j", 1, None, VNC)
+    lm._stack_points("u/s.h5j", 1, None, BRAIN)
+    assert calls == [219, 174]
+
+
+def test_vnc_points_cache_key_unchanged():
+    """Existing VNC point caches (hundreds of GB of downloads) stay valid."""
+    import hashlib
+    from nb3d.em import VNC
+    legacy = hashlib.sha1(f"v{lm.POINTS_VERSION}|u/s.h5j|1|None|{lm.MAX_POINTS}".encode()).hexdigest()
+    assert lm._points_path("u/s.h5j", 1, None, VNC).stem == legacy

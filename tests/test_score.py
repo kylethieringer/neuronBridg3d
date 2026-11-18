@@ -95,3 +95,13 @@ def test_combine_values():
     assert score.combine(0.8, 0.5, 0.5) == pytest.approx(0.6)
     assert score.combine(0.8, None) == pytest.approx(0.8)
     assert score.combine(0.8, 0.0, 1.0) == pytest.approx(0.8)
+
+
+def test_brain_template_mirrors_at_brain_midline():
+    """A brain match on the other hemisphere is found only when mirroring at the brain midline (314 um), not the VNC one."""
+    from nb3d.em import BRAIN
+    em = curve(offset=(150, 0, 0))  # left brain hemisphere
+    lm = LmPoints(mirror_x(em, BRAIN), "3d")
+    s = score.shape_score(em, lm, BRAIN)
+    assert s.value > 0.9 and s.mirrored is True
+    assert score.shape_score(em, lm).value < 0.5  # VNC midline: the mirror lands in the wrong place

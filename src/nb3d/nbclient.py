@@ -50,6 +50,7 @@ class EmImage:
     files: dict[str, str]
     neuron_instance: str | None = None
     annotations: list[str] = field(default_factory=list)
+    anatomical_area: str = "VNC"  # BANC bodies also have a "Brain" image (JRC2018_Unisex_20x_HR)
 
 
 @dataclass
@@ -101,6 +102,7 @@ def get_em_images(dataset: str, body_id: int) -> list[EmImage]:
             files=im["files"],
             neuron_instance=im.get("neuronInstance"),
             annotations=im.get("annotations") or [],
+            anatomical_area=im.get("anatomicalArea", "VNC"),
         )
         for im in data.get("results", [])
         if im.get("libraryName") == lib

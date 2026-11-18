@@ -9,10 +9,10 @@ from __future__ import annotations
 
 import numpy as np
 
-from .em import TEMPLATE_PX, VOXEL_UM
+from .em import VNC, Template
 
-LABEL_STRIP_PX = 90  # CDM PNGs are 1209 px tall: 90-px label strip on top of the 1119-px template
-Z_MAX_UM = (TEMPLATE_PX[2] - 1) * VOXEL_UM[2]
+LABEL_STRIP_PX = VNC.label_strip_px  # VNC CDM PNGs are 1209 px tall: 90-px label strip on top of the 1119-px template
+Z_MAX_UM = (VNC.px[2] - 1) * VNC.voxel_um[2]
 
 LUT = np.array([
     (127, 0, 255), (125, 3, 255), (124, 6, 255), (122, 9, 255), (121, 12, 255), (120, 15, 255), (119, 18, 255), (118, 21, 255),
@@ -52,16 +52,21 @@ LUT = np.array([
 _LUT_N = LUT.astype(float) / LUT.max(axis=1, keepdims=True)
 
 
-def crop_label(rgb: np.ndarray) -> np.ndarray:
-    """Drop the label strip if present, returning the 1119 x 573 template-sized image."""
-    if rgb.shape[0] == TEMPLATE_PX[1] + LABEL_STRIP_PX:
-        return rgb[LABEL_STRIP_PX:]
+def crop_label(rgb: np.ndarray, template: Template = VNC) -> np.ndarray:
+    """Drop the label strip if present and blank any label drawn inside the image, returning the template-sized image."""
+    if template.label_strip_px and rgb.shape[0] == template.px[1] + template.label_strip_px:
+        rgb = rgb[template.label_strip_px:]
+    if template.label_box:
+        x0, y0, x1, y1 = template.label_box
+        rgb = rgb.copy()
+        rgb[y0:y1, x0:x1] = 0
     return rgb
 
 
-def cdm_to_points(rgb: np.ndarray, threshold: int = 20) -> np.ndarray:
+def cdm_to_points(rgb: np.ndarray, threshold: int = 20, template: Template = VNC) -> np.ndarray:
     """Pixels with max(R,G,B) > threshold -> (N, 3) template microns; z from the hue LUT."""
-    img = crop_label(np.asarray(rgb))[..., :3]
+    vx, vy, vz = template.voxel_um
+    img = crop_label(np.asarray(rgb), template)[..., :3]
     mask = img.max(axis=2) > threshold
     ys, xs = np.nonzero(mask)
     if len(xs) == 0:
@@ -72,5 +77,5 @@ def cdm_to_points(rgb: np.ndarray, threshold: int = 20) -> np.ndarray:
     for s in range(0, len(px), 50000):  # chunk to bound memory
         d = ((px[s:s + 50000, None, :] - _LUT_N[None]) ** 2).sum(axis=2)
         idx[s:s + 50000] = d.argmin(axis=1)
-    z = idx / 255.0 * Z_MAX_UM
-    return np.column_stack([xs * VOXEL_UM[0], ys * VOXEL_UM[1], z])
+    z = idx / 255.0 * (template.px[2] - 1) * vz
+    return np.column_stack([xs * vx, ys * vy, z])

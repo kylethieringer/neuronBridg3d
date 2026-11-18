@@ -4,7 +4,6 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
 const COLORS = { em: 0xd63fd6, lm: 0x33cc33, ex: 0xf0a020, box: 0x666670 };
-const MIDLINE_X = 132.12;
 
 export class Viewer {
   constructor(el) {
@@ -23,6 +22,7 @@ export class Viewer {
     this.pointSize = 1.25;
     this.lmOpacity = 0.35;
     this.mirror = false;
+    this.midline = 132.12;  // set per template by setData
     new ResizeObserver(() => this.resize()).observe(el);
     this.resize();
     const loop = () => { this.controls.update(); this.renderer.render(this.scene, this.camera); requestAnimationFrame(loop); };
@@ -39,7 +39,7 @@ export class Viewer {
   _points(xyz, color, opacity, mirror = false) {
     const pos = new Float32Array(xyz.length * 3);
     xyz.forEach(([x, y, z], i) => {
-      pos[i * 3] = mirror ? 2 * MIDLINE_X - x : x;
+      pos[i * 3] = mirror ? 2 * this.midline - x : x;
       pos[i * 3 + 1] = -y;
       pos[i * 3 + 2] = -z;
     });
@@ -65,7 +65,7 @@ export class Viewer {
       segments.forEach((s, i) => {
         for (let k = 0; k < 2; k++) {
           const x = s[k * 3];
-          pos[i * 6 + k * 3] = mirror ? 2 * MIDLINE_X - x : x;
+          pos[i * 6 + k * 3] = mirror ? 2 * this.midline - x : x;
           pos[i * 6 + k * 3 + 1] = -s[k * 3 + 1];
           pos[i * 6 + k * 3 + 2] = -s[k * 3 + 2];
         }
@@ -94,8 +94,9 @@ export class Viewer {
     }
   }
 
-  setData({ em, em_segments, lm, template_outline, expression }) {
+  setData({ em, em_segments, lm, template_outline, expression, template = "VNC", midline_x = 132.12 }) {
     this._clear(this.layers.lm); this._clear(this.layers.ex); this._clear(this.layers.box);
+    this.midline = midline_x;
     this.emData = em;
     this.emSegments = em_segments;
     this._drawEm();
@@ -105,13 +106,16 @@ export class Viewer {
     const size = [Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys), Math.max(...zs) - Math.min(...zs)];
     const box = new THREE.Box3(new THREE.Vector3(0, -size[1], -size[2]), new THREE.Vector3(size[0], 0, 0));
     this.layers.box = new THREE.Box3Helper(box, COLORS.box); this.root.add(this.layers.box);
-    if (!this.framed) this.resetView();
+    this.center = new THREE.Vector3(size[0] / 2, -size[1] / 2, -size[2] / 2);
+    this.distance = 1.35 * Math.max(size[0], size[1]);
+    if (!this.framed || template !== this.template) this.resetView();  // new template: re-frame
+    this.template = template;
   }
 
   resetView() {
-    const c = new THREE.Vector3(132, -258, -76);
+    const c = this.center || new THREE.Vector3(132, -258, -76);
     this.controls.target.copy(c);
-    this.camera.position.set(c.x, c.y, c.z + 700);
+    this.camera.position.set(c.x, c.y, c.z + (this.distance || 700));
     this.camera.up.set(0, 1, 0);
     this.framed = true;
   }

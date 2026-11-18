@@ -19,7 +19,7 @@ from PIL import Image
 
 from .cache import CACHE_DIR, fetch, fetch_transient
 from .cdm25d import cdm_to_points, crop_label
-from .em import TEMPLATE_PX, VOXEL_UM
+from .em import TEMPLATES, VNC, Template
 from .nbclient import LmHit, file_url
 
 MAX_POINTS = 20000
@@ -35,8 +35,8 @@ class LmPoints:
     source: Literal["3d", "2.5d"]
 
 
-def decode_h5j(path: Path, channel: int) -> np.ndarray:
-    """Decode 1-based ``channel`` (CDM_N suffix) of an H5J stack -> (z, y, x) uint16, z fixed to 219."""
+def decode_h5j(path: Path, channel: int, nz: int = VNC.px[2]) -> np.ndarray:
+    """Decode 1-based ``channel`` (CDM_N suffix) of an H5J stack -> (z, y, x) uint16, z padded/cut to ``nz``."""
     with h5py.File(path, "r") as f:
         grp = f["Channels"]
         data = grp[f"Channel_{channel - 1}"][()].tobytes()
@@ -44,7 +44,6 @@ def decode_h5j(path: Path, channel: int) -> np.ndarray:
     with av.open(io.BytesIO(data)) as c:
         frames = [fr.to_ndarray(format="gray16le")[:h, :w] for fr in c.decode(video=0)]
     vol = np.stack(frames)
-    nz = TEMPLATE_PX[2]
     if vol.shape[0] < nz:
         vol = np.concatenate([vol, np.zeros((nz - vol.shape[0], h, w), vol.dtype)])
     return vol[:nz]
@@ -90,10 +89,10 @@ def signal_threshold(volume: np.ndarray, max_fraction: float = SIGNAL_MAX_FRACTI
     return float(min(t, np.quantile(s, 1 - SIGNAL_MIN_FRACTION)))
 
 
-def cdm_threshold(rgb: np.ndarray) -> float:
+def cdm_threshold(rgb: np.ndarray, template: Template = VNC) -> float:
     """Brightness threshold for a CDM: ``signal_threshold`` on max(R, G, B), allowing more signal
     than in a stack. Replaces a fixed threshold of 20, which kept tissue background on dim images."""
-    return signal_threshold(crop_label(np.asarray(rgb))[..., :3].max(axis=2), CDM_SIGNAL_MAX_FRACTION)
+    return signal_threshold(crop_label(np.asarray(rgb), template)[..., :3].max(axis=2), CDM_SIGNAL_MAX_FRACTION)
 
 
 def stack_to_points(volume: np.ndarray, voxel_um: tuple[float, float, float],
@@ -110,14 +109,22 @@ def stack_to_points(volume: np.ndarray, voxel_um: tuple[float, float, float],
     return pts
 
 
-def _stack_points(stack_url: str, channel: int, threshold: float | None) -> np.ndarray:
+def _points_path(stack_url: str, channel: int, threshold: float | None, template: Template = VNC) -> Path:
+    """Cache file for a stack's points. Non-VNC templates get their name in the key: the first BANC run cached brain
+    stacks decoded with VNC geometry under the plain key. VNC keys are unchanged so existing caches stay valid."""
     key = f"v{POINTS_VERSION}|{stack_url}|{channel}|{threshold}|{MAX_POINTS}"
-    path = POINTS_DIR / f"{hashlib.sha1(key.encode()).hexdigest()}.npy"
+    if template is not VNC:
+        key += f"|{template.name}"
+    return POINTS_DIR / f"{hashlib.sha1(key.encode()).hexdigest()}.npy"
+
+
+def _stack_points(stack_url: str, channel: int, threshold: float | None, template: Template = VNC) -> np.ndarray:
+    path = _points_path(stack_url, channel, threshold, template)
     if path.exists():
         return np.load(path)
     with fetch_transient(stack_url) as stack:
-        vol = decode_h5j(stack, channel)
-    pts = stack_to_points(vol, VOXEL_UM, threshold)
+        vol = decode_h5j(stack, channel, template.px[2])
+    pts = stack_to_points(vol, template.voxel_um, threshold)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(f".{os.getpid()}-{threading.get_ident()}.part")
     with open(tmp, "wb") as f:
@@ -127,14 +134,15 @@ def _stack_points(stack_url: str, channel: int, threshold: float | None) -> np.n
 
 
 def load_lm_points(hit: LmHit, prefer_3d: bool = True, threshold: float | None = None) -> LmPoints:
-    if hit.anatomical_area != "VNC":
-        raise ValueError(f"image {hit.image_id} is a {hit.anatomical_area} image; only VNC-template images can be decoded")
+    """Points in the hit's own template (VNC or brain microns, by ``anatomical_area``)."""
+    template = TEMPLATES[hit.anatomical_area]
     stack_url = file_url(hit.files, "VisuallyLosslessStack")
     if prefer_3d and stack_url:
-        return LmPoints(_stack_points(stack_url, hit.channel or 1, threshold), "3d")
+        return LmPoints(_stack_points(stack_url, hit.channel or 1, threshold, template), "3d")
     cdm_url = file_url(hit.files, "CDM") or file_url(hit.files, "Gal4Expression")
     rgb = np.asarray(Image.open(fetch(cdm_url)).convert("RGB"))
-    pts = cdm_to_points(rgb, threshold=int(threshold if threshold is not None else cdm_threshold(rgb)))
+    thr = threshold if threshold is not None else cdm_threshold(rgb, template)
+    pts = cdm_to_points(rgb, threshold=int(thr), template=template)
     if len(pts) > MAX_POINTS:
         pts = pts[np.sort(np.random.default_rng(0).choice(len(pts), MAX_POINTS, replace=False))]
     return LmPoints(pts, "2.5d")

@@ -144,3 +144,38 @@ def test_cli_workers_flag(monkeypatch):
     monkeypatch.setattr(run, "report", lambda df, n: "")
     cli.main(["benchmark", "--workers", "3"])
     assert rank.WORKERS == 3
+
+
+def test_evaluate_body_brain_rank_is_head_to_head_on_brain_scored_lines(monkeypatch):
+    """Only some lines have a brain image. Both rankings are compared on that same set of lines, so a line is
+    not lifted just by having a brain score."""
+    full = [Candidate(l, i + 1, 100 - i, []) for i, l in enumerate(["A", "B", "C", "D"])]
+    monkeypatch.setattr(run, "resolve", lambda ds, q: "group")
+    monkeypatch.setattr(run, "collect_candidates", lambda g, top_n=200, libraries=None: full)
+    monkeypatch.setattr(run, "nb_order", lambda g, libraries=None: [c.line for c in full])
+    a, b, c, d = (_ranked(l, i + 1, i + 1) for i, l in enumerate("ABCD"))
+    a.brain, b.brain, c.brain = 0.1, None, 0.5
+    c.brain_source = "2.5d"
+    monkeypatch.setattr(run, "rerank", lambda g, cands, **kw: [a, b, c, d])
+    row = run.evaluate_body("banc", 7, {"C"})
+    assert row["n_brain_lines"] == 2
+    assert row["nb3d_rank_brain_set"] == 2 and row["nb3d_brain_rank"] == 1 and row["brain_source"] == "2.5d"
+    row = run.evaluate_body("banc", 7, {"B"})  # correct line has no brain score
+    assert row["nb3d_rank_brain_set"] is None and row["nb3d_brain_rank"] is None and row["brain_source"] is None
+
+
+def test_run_benchmark_bodies_filter(tmp_path, monkeypatch):
+    _fake_gt(tmp_path, monkeypatch)
+    monkeypatch.setattr(run, "evaluate_body", lambda ds, body, *a: _ok_row(ds, body, *a))
+    df = run.run_benchmark("manc", body_ids=[3, 1], out=tmp_path / "x.csv")
+    assert sorted(df.body_id) == [1, 3]
+    assert "nb3d_brain_rank" in df.columns
+
+
+def test_cli_bodies_flag(monkeypatch):
+    from nb3d import cli
+    seen = {}
+    monkeypatch.setattr(run, "run_benchmark", lambda *a, body_ids=None, **k: seen.setdefault("ids", body_ids) and run.pd.DataFrame())
+    monkeypatch.setattr(run, "report", lambda df, n: "")
+    cli.main(["benchmark", "--bodies", "5, 6,7"])
+    assert seen["ids"] == [5, 6, 7]

@@ -15,6 +15,7 @@ def main(argv: list[str] | None = None) -> None:
     b.add_argument("--top-n", type=int, default=200)
     b.add_argument("--libraries", choices=["all", "split"], default="split")
     b.add_argument("--workers", type=int, help="parallel image workers (each holds a ~280 MB stack; default 8)")
+    b.add_argument("--bodies", help="comma-separated body IDs: run only these ground-truth bodies")
     b.add_argument("--out", help="results CSV (default results/benchmark-<dataset>-tier<N>-<libraries>.csv); "
                    "bodies already in it are skipped")
 
@@ -29,7 +30,8 @@ def main(argv: list[str] | None = None) -> None:
             from . import rank
             rank.WORKERS = a.workers
         libs = run.ALL_LIBRARIES if a.libraries == "all" else run.SPLIT_LIBRARIES
-        df = run.run_benchmark(a.dataset, a.tier, a.limit, a.top_n, libs, out=a.out)
+        ids = [int(x) for x in a.bodies.split(",") if x.strip()] if a.bodies else None
+        df = run.run_benchmark(a.dataset, a.tier, a.limit, a.top_n, libs, out=a.out, body_ids=ids)
         if a.limit:
             df = df.head(a.limit)
         print(run.report(df, a.top_n))
