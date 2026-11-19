@@ -45,6 +45,12 @@ uv run nb3d serve         # opens http://127.0.0.1:8765 in your browser
 - **3D** — scored against the line's aligned 3D image stack.
 - **2.5D** — no 3D stack was available, so depth was decoded from NeuronBridge's colour-depth
   image (accurate to about one slice, but cells hidden behind others are lost).
+- **Score / Fwd / Rev** — the rank uses the mean of forward NBLAST (EM → LM: is the whole cell
+  in the image?) and reverse NBLAST (LM → EM: is the image only the cell?).
+- **Brain / B fwd / B rev** (BANC only) — the same score against the cell's brain part and the
+  line's 20x brain images. It is shown for reference and does not affect the rank. It is most useful when
+  the VNC score is weak; lines with broad brain expression score low here even when correct.
+  Tick **Brain** in the viewer to see the brain image.
 - **↔** — the match was found on the mirrored side.
 - **NB #** — the line's rank in NeuronBridge for the same cells.
 - **Penalty** — fraction of the line's full expression lying more than 15 µm from your cells
@@ -65,6 +71,16 @@ Ground truth (`data/groundtruth.csv`) is rebuilt with `uv run python -m nb3d.ben
 from the published tables in `research/groundtruth-sources/`.
 Each neuron takes about 1–3 minutes cold, so a full tier-1 run (324 MANC neurons) takes hours.
 
+Results (November 2026; full write-up in `docs/benchmark-2026-11.md`). These compare the same neurons, those
+whose correct line is in NeuronBridge's top 200:
+
+| Dataset, tier | Neurons | Median rank: NeuronBridge → nb3d | Top 20: NeuronBridge → nb3d |
+|---|---|---|---|
+| MANC, tier 1 (headline) | 247 | 15 → **3** | 53% → **88%** |
+| MANC, tier 2 | 182 | 12 → **6** | 63% → **76%** |
+| BANC, tier 1 (exploratory) | 267 | 5 → **3** | 76% → **93%** |
+| BANC, tier 2 (exploratory) | 101 | **6** → 8 | **79%** → 74% |
+
 ## Known limits
 
 - Only NeuronBridge's **top 200 candidate lines** are re-scored (configurable). A correct line
@@ -72,4 +88,6 @@ Each neuron takes about 1–3 minutes cold, so a full tier-1 run (324 MANC neuro
 - BANC searches use NeuronBridge's BANC **v626**; newer BANC IDs are translated through the
   public BANC table. BANC benchmark results rely on cross-dataset cell-type matches and are exploratory.
 - MANC has no segment annotation in the public table, so the segment filter is BANC-only.
+- Cells that barely enter the VNC (e.g. some BANC brain neurons) can score 0 against every line; their
+  order then falls back to NeuronBridge's.
 - Gen1 GAL4 (R…/VT…) full-expression images exist only as colour-depth images, so their penalty is 2.5D.
