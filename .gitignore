@@ -1,4 +1,3 @@
-research/groundtruth-sources/banc/*.feather
 .superpowers/
 __pycache__/
 .venv/
@@ -10,3 +9,7 @@ data/verdicts.csv
 results/*.log
 results/*.cmd
 results/bias-25d-vs-3d.csv
+# development notes and exploratory scripts (kept locally, not shipped)
+docs/superpowers/
+research/
+spike/

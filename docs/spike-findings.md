@@ -1,7 +1,7 @@
 # Spike findings — NeuronBridge data availability (2026-11-09)
 
-All facts below were observed directly against the public buckets with the
-probe scripts in `spike/` (`explore1.py`–`explore9.py`). Data release: `v3_10_0`
+All facts below were observed directly against the public buckets with
+short probe scripts. Data release: `v3_10_0`
 (`https://janelia-neuronbridge-data-prod.s3.us-east-1.amazonaws.com/current.txt`).
 
 ## URLs and lookup
@@ -75,7 +75,7 @@ Across all 2212 hits: 2040 (92%) list a stack. Images without one → 2.5D.
 - **Mirror midline:** x = 573 × 0.461122 / 2 = **132.12 µm**.
 - Hue→z: the 256-entry colour LUT in JaneliaSciComp/colormipsearch
   `colormipsearch-api/src/main/java/org/janelia/colormipsearch/cds/GradientAreaGapUtils.java`
-  (`findSliceNumberInLUT`, copy in `spike/ref/`). Entry 0 = (127,0,255) = front,
+  (`findSliceNumberInLUT`). Entry 0 = (127,0,255) = front,
   entry 255 = (255,0,200) = back. Decode: normalise each pixel's RGB by its max channel,
   nearest LUT entry (normalised the same way) → index i; z_slice = i / 255 × 218.
   **Validated against the 3D stack (SS41075 Channel_0 argmax-z): r = 0.995, median error
@@ -98,8 +98,7 @@ Across all 2212 hits: 2040 (92%) list a stack. Images without one → 2.5D.
   - MANC: `https://storage.googleapis.com/lee-lab_brain-and-nerve-cord-fly-connectome/compiled_data/manc_121/manc_121_meta.feather`
     (23,650 rows): `manc_121_id`, `cell_type`, `side` (`left`/`right`), `region`, … —
     **no segment/neuromere column.**
-  - BANC: `.../compiled_data/banc_888/banc_888_meta.feather` (188,508 rows; also in
-    `research/groundtruth-sources/banc/`): `root_626` (**the NeuronBridge ID**), `root_888`,
+  - BANC: `.../compiled_data/banc_888/banc_888_meta.feather` (188,508 rows): `root_626` (**the NeuronBridge ID**), `root_888`,
     `cell_type`, `manc_cell_type`, `side`, `region` (`ventral_nerve_cord` 31,688 rows, all with
     `root_626`), `neuromere` (T1/T2/T3/A1…).
 - Bonus: the BANC table maps v888/v850/v890 roots to `root_626`, so typed newer BANC IDs can

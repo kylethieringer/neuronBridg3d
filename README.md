@@ -10,8 +10,7 @@ interactive 3D overlay so you can judge the match yourself.
 - Optional **extra-expression penalty** (off by default): ranks down lines whose full expression
   pattern extends well beyond your cells.
 
-Design: `docs/superpowers/specs/2026-11-09-em-lm-3d-matching-design.md` ·
-Data facts: `docs/spike-findings.md`
+Data facts (URLs, image formats, geometry): `docs/spike-findings.md`
 
 > **Testing release.** This is an early version shared for testing. Please report problems,
 > surprising rankings, or confusing parts of the interface as
@@ -102,8 +101,8 @@ uv run nb3d benchmark --dataset manc --tier 1 --limit 10 # quick check
 ```
 
 Results are appended to `results/benchmark-*.csv` (re-running resumes where it stopped).
-Ground truth (`data/groundtruth.csv`) is rebuilt with `uv run python -m nb3d.benchmark.groundtruth`
-from the published tables in `research/groundtruth-sources/`.
+Ground truth (`data/groundtruth.csv`) was compiled from published driver-line tables (Cheong et al. 2024,
+Stürner et al. 2025, Zung et al. 2025, Ehrhardt et al. 2025; see `docs/benchmark-2026-11.md`).
 Each neuron takes about 1–3 minutes cold, so a full tier-1 run (324 MANC neurons) takes hours.
 
 Results (November 2026; full write-up in `docs/benchmark-2026-11.md`). These compare the same neurons, those

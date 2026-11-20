@@ -102,7 +102,7 @@ with a 0.1% voxel floor (83ee891, 46cc00c). See `docs/spike-findings.md`.
 
 After the adaptive threshold, neurons whose correct line is 2.5D improved a lot, while those whose correct line is 3D slipped by 1–2
 ranks. That raised the worry that 2.5D scores run higher. We checked on 56 MANC tier-1/2 neurons by scoring every candidate
-image that has a 3D stack twice: from the stack, and from its colour-depth image (`research/bias_25d_vs_3d.py`).
+image that has a 3D stack twice: from the stack, and from its colour-depth image.
 
 - **No inflation.** On the same image, the two scores agree closely (r = 0.94). Among the top-scoring images,
   2.5D is slightly *lower* (median −0.03), mainly because it misses part of the cell (forward −0.04).
@@ -290,7 +290,6 @@ uv run nb3d benchmark --dataset manc --tier 1     # writes results/benchmark-man
 uv run nb3d benchmark --dataset manc --tier 2
 uv run nb3d benchmark --dataset manc --tier 3
 uv run nb3d benchmark --dataset banc
-uv run python research/bias_25d_vs_3d.py --n 60   # 2.5D vs 3D check, then bias_25d_vs_3d_report.py
 ```
 
 Earlier versions' outputs are kept for comparison: `results/*-split-forward.csv` (forward NBLAST only) and
