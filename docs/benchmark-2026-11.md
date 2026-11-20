@@ -182,12 +182,52 @@ The previous outputs are kept as `results/*banc*-brainbug.*`.
 
 ### Remaining BANC losses
 
-Most of the largest remaining losses are tier-2 lines that NeuronBridge ranks first and nb3d scores from their
-colour-depth image: SS02542 (rank 1 → 115), SS02383 (1 → 73), SS02256 (1 → 67) and SS01592 (1 → 59). Two tier-2
-neurons with SS00731 drop from 19 → 121 and 13 → 101, and one tier-1 neuron drops from 5 → 113 (SS41027). These cases
-have not been examined. Many BANC ground-truth neurons are descending neurons (DNs). Their skeletons used here cover
-only the VNC (more than 90% of BANC DN skeleton nodes lie inside the VNC template), so brain morphology plays no part in
-the VNC score that sets the rank. A separate brain score is now reported beside it (next section).
+The nine largest remaining losses (2026-11-20) are mostly descending neurons (DNs) in tier 2. For each, the correct line
+was also scored against every 20x VNC image it has, not only the three images nb3d takes from NeuronBridge's hits.
+Scripts: `loss2.py` and `allims.py` (session scratchpad, not kept).
+
+| Neuron | Correct line | Rank: NB → nb3d | Best score over all the line's 20x images | nb3d #1 score | Cause |
+|---|---|---|---|---|---|
+| DNb01 | SS02383 | 1 → 73 | 0.257 | 0.236 | wrong images scored |
+| DNb09 | SS02542 | 1 → 115 | 0.169 | 0.168 | wrong images scored |
+| DNb09 | SS02542 | 1 → 59 | 0.176 | 0.151 | wrong images scored |
+| DNp06 | SS02256 | 1 → 67 | 0.320 | 0.392 (#3: 0.296) | wrong images scored |
+| DNp19 | SS01592 | 1 → 59 | 0.095 | 0.369 | line broader than the cell |
+| DNa01 | SS00731 | 19 → 121 | 0.046 | 0.368 | line broader than the cell |
+| DNa01 | SS00731 | 13 → 101 | 0.065 | 0.219 | line broader than the cell |
+| iii4 | SS41027 | 5 → 113 | 0.344 | 0.563 | samples vary; similar lines score higher |
+| DNge097 | SS29909 | 8 → 166 | 0.011 | 0.280 | no VNC image for the brain hit |
+
+**Wrong images scored (4 of 9).** nb3d scores a line from its top three NeuronBridge hits. NeuronBridge's colour-depth
+score rewards coverage, so its best hits for a line tend to be the samples with the most signal, which are often the
+noisiest. For these four, all three hits were 2014 samples whose point clouds include diffuse background or bright
+blobs (reverse NBLAST about −0.6), so the line scored 0. The same lines have other 20x samples (mostly 2015–2020) that
+show the DN cleanly and would place it at about rank 1–3. Two SS02383 samples from the same day, channel and line score
+0.257 and −0.165, so this is variation between samples, not a broad line. The line's own Split-GAL4 Drivers image is
+not reliably the clean one (SS02383's 2014 Drivers image scores −0.185). A possible fix is to score more of each line's
+images and keep the best. This needs a benchmark: the best of more images also raises the scores of wrong lines, and
+some lines have 10–40 images of about 8 MB each.
+
+**Line broader than the cell (3 of 9).** Every image of SS00731 (9 images, including 2019 Drivers images) and SS01592
+(40 images) has reverse NBLAST around −0.4 or lower: the lines label more than the DN in the VNC, and nb3d marks them
+down as designed. SS41027 (iii4) varies between samples (−0.25 to 0.34), but several similar lines score 0.52–0.56,
+so it would still rank low.
+
+**No VNC image (1 of 9).** SS29909's only NeuronBridge hit is a brain image with no VNC image from the same fly (see
+"Brain-image fix"). Its one 20x VNC image scores 0.01. The brain score ranks it 2nd (next section).
+
+**Skeleton nodes outside the template.** About 10% of each BANC DN skeleton's nodes (the neck/brain part) are mapped past
+the VNC template's lateral edge, up to x ≈ 405 µm against a template 264 µm wide. They form a diagonal "wing" from the
+neck. No LM image has signal there, so these nodes lower every line's forward score. Dropping nodes outside the
+template was tried and reverted. On a re-score of 39 neurons (30 random BANC neurons plus the nine above), only DNs
+changed, and the result was mixed: the random set had 5 better / 5 worse / 20 same (median 6 → 4.5), with large drops
+such as DNp16 10 → 27 and DNp15 20 → 39. The nine losses went 2 better / 5 worse (median 101 → 113; SS02542 115 → 165 and
+59 → 113). The off-template nodes probably add a similar low floor to every line's forward score, so removing them
+widens the forward differences between lines and shifts how forward and reverse trade off in the mean. The nodes are
+kept. Script: `crop_check.py` (session scratchpad, not kept).
+
+Brain morphology plays no part in the VNC score that sets the rank. A separate brain score is reported beside it (next
+section).
 
 ### Brain score (d9e334d)
 
