@@ -1,6 +1,6 @@
 # neuronBridg3d
 
-A personal tool for finding **clean, sparse driver lines** that label a given neuron in the
+A tool for finding **clean, sparse driver lines** that label a given neuron in the
 MANC or BANC VNC connectomes. It takes NeuronBridge's precomputed candidate lines for your
 neuron(s), **re-ranks them by 3D shape similarity**, and shows each candidate in an
 interactive 3D overlay so you can judge the match yourself.
@@ -13,32 +13,67 @@ interactive 3D overlay so you can judge the match yourself.
 Design: `docs/superpowers/specs/2026-11-09-em-lm-3d-matching-design.md` ·
 Data facts: `docs/spike-findings.md`
 
-## Install (Windows)
+> **Testing release.** This is an early version shared for testing. Please report problems,
+> surprising rankings, or confusing parts of the interface as
+> [GitHub issues](https://github.com/kylethieringer/neuronBridg3d/issues), including the
+> dataset and body ID / cell type you searched.
 
-```powershell
-scoop install uv          # Python project manager
-cd D:\neuronBridg3d
-uv sync                   # installs Python 3.12 deps into .venv
+## Install
+
+You need [uv](https://docs.astral.sh/uv/getting-started/installation/) (a Python project manager)
+and git. uv downloads the right Python (3.12) by itself; nothing else is needed (3D image stacks are
+decoded with the `av` package). Works on Windows, macOS and Linux.
+
+1. Install uv:
+   - Windows (PowerShell): `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`
+   - macOS / Linux: `curl -LsSf https://astral.sh/uv/install.sh | sh`
+2. Get the code and install its dependencies:
+
+   ```sh
+   git clone https://github.com/kylethieringer/neuronBridg3d.git
+   cd neuronBridg3d
+   uv sync                   # installs dependencies into .venv
+   ```
+
+To update later: `git pull` then `uv sync`.
+
+### Disk space and the cache
+
+All data comes from public sources (NeuronBridge, FlyLight, the MANC/BANC public tables); no login or
+API key is needed. Downloaded images and extracted point clouds are cached so repeat searches are
+fast. The first search of a neuron downloads up to a few GB; the cache grows with every new neuron
+searched (tens of GB after many searches). It lives in `cache/` inside the project folder unless
+you point it elsewhere with the `NB3D_CACHE` environment variable, e.g.
+
+```sh
+# macOS / Linux
+export NB3D_CACHE=/path/with/space/nb3d-cache
+# Windows (PowerShell)
+$env:NB3D_CACHE = "E:\nb3d-cache"
 ```
 
-No other software is needed. 3D image stacks are decoded with the `av` package.
+Deleting the cache folder is always safe; files are downloaded again when needed.
 
 ## Use
 
-```powershell
+```sh
 uv run nb3d serve         # opens http://127.0.0.1:8765 in your browser
 ```
+
+The app runs only on your own computer (it is not reachable from other machines). Stop it with Ctrl+C.
+Use `--port 8800` if port 8765 is taken, `--no-browser` to not open a browser tab.
 
 1. Type a body ID (`10123`), several (`10123, 10011`), or a cell type (`hg1 MN`). Pick MANC or BANC.
 2. Choose which line collections to search (Split-GAL4 is on by default) and, if you want,
    tick **Penalise extra expression** and set its weight.
 3. Search. The first search of a neuron downloads images (up to a few GB, a few minutes);
-   results are cached in `cache/`, so repeat searches are fast. Raw 3D stacks (`.h5j`, ~8 MB each)
+   results are cached (see above), so repeat searches are fast. Raw 3D stacks (`.h5j`, ~8 MB each)
    are not kept, only the point clouds extracted from them, so moving the threshold slider
    re-downloads the stack it needs.
 4. Click a line to see it in 3D: **magenta** = EM cells, **green** = the matched LM image,
    **orange** = the line's full expression (tick "Full expression"). Drag to rotate, scroll to zoom.
-5. Mark lines ✓ / ✗ / ? — verdicts are saved to `data/verdicts.csv`.
+5. Mark lines ✓ / ✗ / ? — verdicts are saved to `data/verdicts.csv` on your computer only
+   (the file is not tracked by git). If you are testing, sharing this file helps.
 
 ### What the labels mean
 
@@ -91,3 +126,7 @@ whose correct line is in NeuronBridge's top 200:
 - Cells that barely enter the VNC (e.g. some BANC brain neurons) can score 0 against every line; their
   order then falls back to NeuronBridge's.
 - Gen1 GAL4 (R…/VT…) full-expression images exist only as colour-depth images, so their penalty is 2.5D.
+- Each line is scored only on the images NeuronBridge matched best (its top hits per line). When those
+  are noisy older samples, a correct line can rank lower than a cleaner sample of it would.
+- The BANC **Brain** score is for reference only and does not affect the rank; lines with broad brain
+  expression score low there even when correct.
