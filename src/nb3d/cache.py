@@ -1,6 +1,7 @@
 """Download-once disk cache for public HTTP resources."""
 from __future__ import annotations
 
+import hashlib
 import os
 import tempfile
 from contextlib import contextmanager
@@ -13,26 +14,43 @@ import requests
 CACHE_DIR = Path(os.environ.get("NB3D_CACHE", Path(__file__).resolve().parents[2] / "cache"))
 
 
+MAX_PATH = 240  # Windows refuses paths over 260 chars (long paths off by default); room for ".xxxxxxxx.part"
+
+
 def cache_path(url: str, cache_dir: Path = CACHE_DIR) -> Path:
-    """Local path for a URL: <cache_dir>/<host>/<url path>."""
+    """Local path for a URL: <cache_dir>/<host>/<url path>, or, when that would be too long for
+    Windows, <cache_dir>/<host>/_long/<hash of url><extension>."""
     u = urlparse(url)
     rel = unquote(u.path).lstrip("/")
-    return Path(cache_dir) / u.netloc / rel
+    p = Path(cache_dir) / u.netloc / rel
+    if len(str(p.absolute())) <= MAX_PATH:
+        return p
+    digest = hashlib.sha1(url.encode()).hexdigest()[:20]
+    return Path(cache_dir) / u.netloc / "_long" / f"{digest}{p.suffix}"
 
 
 def fetch(url: str, cache_dir: Path = CACHE_DIR) -> Path:
-    """Return a local copy of ``url``, downloading it once. Writes are atomic."""
+    """Return a local copy of ``url``, downloading it once. Writes are atomic.
+
+    Safe when parallel workers fetch the same URL: each download goes to its own temp file, and if
+    another worker has already put the file in place (or holds it open, which blocks replacing on
+    Windows), that copy is used."""
     target = cache_path(url, cache_dir)
     if target.exists():
         return target
     target.parent.mkdir(parents=True, exist_ok=True)
-    part = target.with_name(target.name + ".part")
+    fd, name = tempfile.mkstemp(dir=target.parent, prefix=target.name + ".", suffix=".part")
+    os.close(fd)
+    part = Path(name)
     try:
         _download(url, part)
-        os.replace(part, target)
+        try:
+            os.replace(part, target)
+        except PermissionError:
+            if not target.exists():
+                raise
     finally:
-        if part.exists():
-            part.unlink()
+        part.unlink(missing_ok=True)
     return target
 
 
