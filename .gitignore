@@ -3,3 +3,10 @@ research/groundtruth-sources/banc/*.feather
 __pycache__/
 .venv/
 cache/
+
+# personal ✓/✗ verdicts from the app
+data/verdicts.csv
+# benchmark run logs, scheduler scripts, large raw research output
+results/*.log
+results/*.cmd
+results/bias-25d-vs-3d.csv
